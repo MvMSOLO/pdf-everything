@@ -26,6 +26,15 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Edit
@@ -69,6 +78,21 @@ object PdfIcons {
     val Star         = Icons.Filled.Star
     val ArrowDown    = Icons.Filled.KeyboardArrowDown
     val ArrowUp      = Icons.Filled.KeyboardArrowUp
+
+    // View modes (spec §15)
+    val SinglePage   = Icons.Filled.Description
+    val Continuous   = Icons.Filled.List
+    val TwoPage      = Icons.Filled.Book
+    val Organizer    = Icons.Filled.Apps
+    val Presentation = Icons.Filled.PlayArrow
+
+    // Fullscreen
+    val Fullscreen       = Icons.Filled.Fullscreen
+    val FullscreenExit   = Icons.Filled.FullscreenExit
+
+    // Navigation arrows
+    val ArrowLeft    = Icons.Filled.KeyboardArrowLeft
+    val ArrowRight   = Icons.Filled.KeyboardArrowRight
 
     // Settings
     val Settings     = Icons.Filled.Settings

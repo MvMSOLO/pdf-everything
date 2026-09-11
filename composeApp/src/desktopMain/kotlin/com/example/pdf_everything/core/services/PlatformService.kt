@@ -99,7 +99,7 @@ actual class PlatformService actual constructor() {
         when {
             osName.contains("linux") -> registerLinuxAssociation()
             osName.contains("windows") -> registerWindowsAssociation()
-            // macOS uses Info.plist inside the app bundle — handled at build time
+            // macOS uses Info.plist inside the app bundle -- handled at build time
         }
     }
 
@@ -132,7 +132,7 @@ actual class PlatformService actual constructor() {
             val exePath = System.getProperty("compose.application.main") ?: "pdf-everything.exe"
             val commands = listOf(
                 "reg add HKCR\\.pdf /ve /d PDFEverything.Assoc.File /f",
-                "reg add HKCR\\PDFEverything.Assoc.File /ve /d "PDF Everything Document" /f",
+                "reg add HKCR\\PDFEverything.Assoc.File /ve /d \"PDF Everything Document\" /f",
                 "reg add HKCR\\PDFEverything.Assoc.File\\shell\\open\\command /ve /d \"$exePath\" \"%1\" /f"
             )
             for (cmd in commands) {

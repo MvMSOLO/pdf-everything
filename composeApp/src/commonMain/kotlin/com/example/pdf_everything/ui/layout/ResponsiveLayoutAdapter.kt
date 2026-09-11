@@ -2,16 +2,15 @@ package com.example.pdf_everything.ui.layout
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Responsive layout adapter per spec §48‑§50.
+ * Responsive layout adapter per spec §48-§50.
  *
  * Window-size breakpoints:
  *   Compact  : < 600dp   (phone)
- *   Medium   : 600–840dp (tablet portrait / small window)
+ *   Medium   : 600-840dp (tablet portrait / small window)
  *   Expanded : > 840dp   (tablet landscape / desktop)
  *
  * These classes drive layout decisions (single-column vs two-pane,
@@ -26,7 +25,7 @@ enum class WindowSizeClass {
 
 enum class WindowHeightClass {
     COMPACT,    // < 480dp
-    MEDIUM,     // 480–900dp
+    MEDIUM,     // 480-900dp
     EXPANDED    // > 900dp
 }
 
@@ -54,12 +53,25 @@ data class LayoutConfiguration(
     val toolbarCollapsed get() = widthClass == WindowSizeClass.COMPACT
 }
 
+/**
+ * Platform-specific screen dimensions provider.
+ * Android uses LocalConfiguration; Desktop uses window size APIs.
+ */
+@Composable
+@ReadOnlyComposable
+expect fun rememberScreenSize(): ScreenSize
+
+data class ScreenSize(
+    val widthDp: Dp,
+    val heightDp: Dp
+)
+
 @Composable
 @ReadOnlyComposable
 fun rememberLayoutConfiguration(): LayoutConfiguration {
-    val configuration = LocalConfiguration.current
-    val widthDp = configuration.screenWidthDp.dp
-    val heightDp = configuration.screenHeightDp.dp
+    val screenSize = rememberScreenSize()
+    val widthDp = screenSize.widthDp
+    val heightDp = screenSize.heightDp
 
     val widthClass = when {
         widthDp < 600.dp -> WindowSizeClass.COMPACT
@@ -81,7 +93,7 @@ fun rememberLayoutConfiguration(): LayoutConfiguration {
     )
 }
 
-// ── Convenience comparison ─────────────────────────────────────────────
+// -- Convenience comparison -----------------------------------------------
 
 infix fun WindowSizeClass.isAtLeast(other: WindowSizeClass): Boolean {
     return this.ordinal >= other.ordinal

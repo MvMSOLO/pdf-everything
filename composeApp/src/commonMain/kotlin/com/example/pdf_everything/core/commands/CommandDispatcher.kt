@@ -38,4 +38,4 @@ class CommandDispatcher(
     val canRedo: Boolean get() = historyManager.canRedo
     val undoDescription: String? get() = historyManager.undoDescription
     val redoDescription: String? get() = historyManager.redoDescription
-}}
+}

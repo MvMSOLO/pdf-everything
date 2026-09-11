@@ -7,11 +7,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.example.pdf_everything.app.router.*
 import com.example.pdf_everything.core.document.Document
 import com.example.pdf_everything.core.services.PlatformService
 import com.example.pdf_everything.ui.design_system.*
 import com.example.pdf_everything.ui.layout.*
+import com.example.pdf_everything.feature.viewer.ViewerScreen
 
 /* ═══════════════════════════════════════════════════════════════════════
  *  PDF Everything — App Shell
@@ -259,9 +261,11 @@ private fun AppContent(
                 }
             )
 
-            is AppRoute.Viewer -> ViewerPlaceholder(
-                documentId = targetRoute.documentId,
-                layout = layout
+            is AppRoute.Viewer -> ViewerScreen(
+                document = null,  // TODO: wire to DocumentRepository.load(targetRoute.documentId)
+                pdfEngine = null,  // TODO: wire to platform PdfEngine instance
+                onBack = { router.popBackStack() },
+                onEdit = { docId -> router.navigate(AppRoute.Editor(docId)) }
             )
 
             is AppRoute.Editor -> EditorPlaceholder(

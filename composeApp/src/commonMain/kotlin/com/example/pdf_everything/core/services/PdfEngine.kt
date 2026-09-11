@@ -51,7 +51,7 @@ class EngineException(
 data class RenderConfig(
     val dpi: Float = 150f,
     val scale: Float = 1f,
-    val rotation: PageRotation = PageRotation.ROT_0,
+    val rotation: PageRotation = PageRotation.ROTATION_0,
     val renderAnnotations: Boolean = true,
     val renderForms: Boolean = true,
     val clipRect: PdfRect? = null,        // null = whole page

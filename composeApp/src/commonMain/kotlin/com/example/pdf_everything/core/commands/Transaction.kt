@@ -7,12 +7,11 @@ package com.example.pdf_everything.core.commands
  */
 data class Transaction(
     val transactionId: String,
-    val description: String,
+    override val description: String,
     val commands: List<DocumentCommand>
 ) : DocumentCommand {
 
     override val commandId: String = transactionId
-    override val description: String = description
 
     override fun canExecute(): Boolean = commands.isNotEmpty() && commands.all { it.canExecute() }
 
