@@ -90,7 +90,8 @@ abstract class PdfEngineAdapter : PdfEngine {
 
     override suspend fun export(documentId: String, config: ExportConfig): EngineResult<List<ByteArray>> {
         requireReady()
-        requireCapability { config.format in it.supportedExportFormats }
+        val format = config.format
+        requireCapability { format in it.supportedExportFormats }
         return wrap { doExport(documentId, config) }
     }
 
