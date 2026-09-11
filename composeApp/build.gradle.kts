@@ -106,6 +106,31 @@ compose.desktop {
             targetFormats(TargetFormat.Exe)
             packageName = "pdf-everything"
             packageVersion = "1.0.0"
+
+            // ── Windows file association (spec §35) ────────────────────
+            windows {
+                menuGroup = "PDF Everything"
+                // Register .pdf file association in the installer
+                dirChooser = true
+                perUserInstall = true
+                // The upgradeUuid must be unique and stable for in-place upgrades
+                upgradeUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            }
+
+            // ── macOS Info.plist entries ─────────────────────────────
+            macOS {
+                // File type associations are declared in Info.plist
+                // Compose Desktop doesn't expose a DSL for this yet;
+                // the app bundle will need a post-build script.
+                bundleID = "com.example.pdf-everything"
+            }
+
+            // ── Linux .desktop entry ─────────────────────────────────
+            linux {
+                // The .desktop file MimeType is set by registerFileAssociation()
+                // at runtime (see PlatformService.desktop actual).
+                menuGroup = "Office"
+            }
         }
     }
 }
