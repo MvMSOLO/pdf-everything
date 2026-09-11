@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.example.pdf_everything.app.router.*
 import com.example.pdf_everything.app.ui.screens.*
+import com.example.pdf_everything.feature.viewer.ViewerScreen
 import com.example.pdf_everything.app.ui.bars.*
 import com.example.pdf_everything.core.services.AppState
 
@@ -71,6 +72,7 @@ fun App(appState: AppState) {
                 ViewerScreen(
                     document = appState.currentDocument,
                     pdfEngine = appState.pdfEngine,
+                    onBack = { router.popBackStack() },
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -79,6 +81,7 @@ fun App(appState: AppState) {
                 ViewerScreen(
                     document = appState.currentDocument,
                     pdfEngine = appState.pdfEngine,
+                    onBack = { router.popBackStack() },
                     modifier = Modifier.padding(innerPadding)
                 )
             }

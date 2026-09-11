@@ -14,17 +14,19 @@ import com.example.pdf_everything.core.services.EngineError
  * On next launch the RecoveryService detects un-graceful shutdowns
  * and offers to restore unsaved work.
  *
- * Phase 1 skeleton — full binary-delta journaling deferred to Phase 3.
+ * Phase 1 — simple text-line journal; full binary-delta journaling deferred to Phase 3.
  */
 class RecoveryService(
     private val engine: PdfEngine,
-    private val recoveryDir: String       // platform-specific writable directory
+    private val fileSystemProvider: FileSystemProvider
 ) {
 
     data class Checkpoint(
         val documentId: String,
         val version: Int,
-        val source: DocumentSource,
+        val sourceType: String,   // "FilePath", "ContentUri", "ByteArraySource"
+        val sourcePath: String?,  // FilePath path or ContentUri uri
+        val sourceDisplayName: String?,
         val timestamp: Long,
         val wasDirty: Boolean
     )
@@ -49,7 +51,21 @@ class RecoveryService(
         val cp = Checkpoint(
             documentId = document.documentId,
             version = document.version,
-            source = source,
+            sourceType = when (source) {
+                is DocumentSource.FilePath -> "FilePath"
+                is DocumentSource.ContentUri -> "ContentUri"
+                is DocumentSource.ByteArraySource -> "ByteArraySource"
+            },
+            sourcePath = when (source) {
+                is DocumentSource.FilePath -> source.path
+                is DocumentSource.ContentUri -> source.uri
+                else -> null
+            },
+            sourceDisplayName = when (source) {
+                is DocumentSource.ContentUri -> source.displayName
+                is DocumentSource.ByteArraySource -> source.displayName
+                else -> null
+            },
             timestamp = System.currentTimeMillis(),
             wasDirty = document.dirtyState.isDirty
         )
@@ -83,7 +99,30 @@ class RecoveryService(
      * the original source.
      */
     suspend fun recover(checkpoint: Checkpoint): EngineResult<Document> {
-        return engine.open(checkpoint.source)
+        val source: DocumentSource = when (checkpoint.sourceType) {
+            "FilePath" -> {
+                val path = checkpoint.sourcePath ?: return EngineResult.Failure(
+                    EngineError.FILE_NOT_FOUND, "Missing file path for recovery")
+                DocumentSource.FilePath(path)
+            }
+            "ContentUri" -> DocumentSource.ContentUri(
+                checkpoint.sourcePath ?: "",
+                checkpoint.sourceDisplayName ?: "document.pdf"
+            )
+            "ByteArraySource" -> {
+                // ByteArray cannot be persisted in Phase 1 journal;
+                // recovery not possible without the original bytes.
+                return EngineResult.Failure(
+                    EngineError.UNSUPPORTED_FEATURE,
+                    "Cannot recover ByteArraySource without original bytes"
+                )
+            }
+            else -> return EngineResult.Failure(
+                EngineError.UNKNOWN,
+                "Unknown source type: ${checkpoint.sourceType}"
+            )
+        }
+        return engine.open(source)
     }
 
     val recoveryStatus: RecoveryStatus
@@ -93,19 +132,52 @@ class RecoveryService(
             else -> RecoveryStatus.NONE
         }
 
-    // ── Persistence (Phase 1: simple text-based journal) ────────────────
+    // ── Persistence — simple delimiter-separated lines ──────────────────
 
     private fun persistJournal() {
-        // Write journal to recoveryDir/recovery_journal.json
-        // Phase 1: in-memory only; will be persisted to disk in Phase 2
-        // with proper atomic file writes
+        val lines = _journal.map { cp ->
+            listOf(
+                cp.documentId,
+                cp.version.toString(),
+                cp.sourceType,
+                cp.sourcePath ?: "",
+                cp.sourceDisplayName ?: "",
+                cp.timestamp.toString(),
+                cp.wasDirty.toString()
+            ).joinToString("\t")
+        }
+        fileSystemProvider.writeText(JOURNAL_FILE, lines.joinToString("\n"))
     }
 
     private fun loadJournal() {
-        // Phase 1: in-memory only
+        val text = fileSystemProvider.readText(JOURNAL_FILE) ?: return
+        _journal.clear()
+        for (line in text.lines()) {
+            if (line.isBlank()) continue
+            val parts = line.split("\t")
+            if (parts.size < 7) continue
+            try {
+                _journal.add(Checkpoint(
+                    documentId = parts[0],
+                    version = parts[1].toInt(),
+                    sourceType = parts[2],
+                    sourcePath = parts[3].ifBlank { null },
+                    sourceDisplayName = parts[4].ifBlank { null },
+                    timestamp = parts[5].toLong(),
+                    wasDirty = parts[6].toBoolean()
+                ))
+            } catch (_: Exception) {
+                // Skip corrupt lines
+            }
+        }
     }
 
     fun clearAll() {
         _journal.clear()
+        fileSystemProvider.delete(JOURNAL_FILE)
+    }
+
+    companion object {
+        private const val JOURNAL_FILE = "recovery_journal.txt"
     }
 }

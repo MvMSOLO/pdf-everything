@@ -6,10 +6,12 @@ import com.example.pdf_everything.app.App
 import com.example.pdf_everything.core.commands.CommandDispatcher
 import com.example.pdf_everything.core.files.DocumentFileService
 import com.example.pdf_everything.core.history.HistoryManager
+import com.example.pdf_everything.core.recovery.FileSystemProvider
 import com.example.pdf_everything.core.recovery.RecoveryService
 import com.example.pdf_everything.core.services.AppState
 import com.example.pdf_everything.core.services.PdfEngine
 import com.example.pdf_everything.core.services.PlatformService
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 fun createPdfEngine(): PdfEngine {
@@ -22,17 +24,18 @@ fun main() {
     // ── Create all services per spec ──────────────────────────────
     val pdfEngine: PdfEngine = createPdfEngine()
 
-    // Safe init (PDFBox doesn't need async init but we honour the contract)
-    val runtime = kotlinx.coroutines.runtime.recoverable
-    kotlinx.coroutines.runBlocking { pdfEngine.initialize() }
+    // PDFBox doesn't need async init but we honour the contract
+    runBlocking { pdfEngine.initialize() }
 
     val platformService = PlatformService()
     val historyManager = HistoryManager()
-    val commandDispatcher = CommandDispatcher()
+    val commandDispatcher = CommandDispatcher(historyManager)
 
     val recoveryDir = System.getProperty("user.home") + "/.pdf-everything/recovery"
+    val fileSystemProvider = DesktopFileSystemProvider(recoveryDir)
     val recoveryService = RecoveryService(
-        fileSystemProvider = DesktopFileSystemProvider(recoveryDir)
+        engine = pdfEngine,
+        fileSystemProvider = fileSystemProvider
     )
 
     val documentFileService = DocumentFileService(
@@ -52,7 +55,7 @@ fun main() {
     application {
         Window(
             onCloseRequest = {
-                kotlinx.coroutines.runBlocking { pdfEngine.shutdown() }
+                runBlocking { pdfEngine.shutdown() }
                 exitApplication()
             },
             title = "PDF Everything",
@@ -66,7 +69,7 @@ fun main() {
 /** Desktop file-system provider for RecoveryService persistence. */
 class DesktopFileSystemProvider(
     private val recoveryDir: String
-) : com.example.pdf_everything.core.recovery.FileSystemProvider {
+) : FileSystemProvider {
 
     private val dir = File(recoveryDir)
 

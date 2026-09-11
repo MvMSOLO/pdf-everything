@@ -19,7 +19,6 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.Calendar
@@ -164,8 +163,15 @@ class PdfBoxAdapter : PdfEngineAdapter() {
         if (!file.exists()) throw EngineException(
             EngineError.FILE_NOT_FOUND, "Original file no longer exists: $path"
         )
-        // PDFBox 2.0.33 incremental save
-        doc.saveIncremental(FileInputStream(file), FileOutputStream(file))
+        // PDFBox 2.0.33 incremental save — saveIncremental(OutputStream)
+        // The doc was loaded from the file, so we can save incrementally to a
+        // temporary output and then replace the original.
+        val tmpFile = File.createTempFile("pdfincr", ".pdf")
+        FileOutputStream(tmpFile).use { out ->
+            doc.saveIncremental(out)
+        }
+        tmpFile.copyTo(file, overwrite = true)
+        tmpFile.delete()
     }
 
     override suspend fun doExport(documentId: String, config: ExportConfig): List<ByteArray> {
@@ -394,11 +400,11 @@ class PdfBoxAdapter : PdfEngineAdapter() {
                 boundingBox = bbox,
                 annotationType = mapAnnotationType(subType),
                 color = 0xFF000000L,
-                author = anno.getCreator(),
+                author = cosDict.getString(COSName.T),
                 contents = anno.getContents(),
-                timestamp = anno.getModificationDate()?.timeInMillis?.toString(),
+                timestamp = cosDict.getString(COSName.M),
                 isPopup = false,
-                replyTo = cosDict.getString(COSName.getFObj("IRT"))
+                replyTo = cosDict.getString(COSName.getPDFName("IRT"))
             )
         }
     }
@@ -413,9 +419,9 @@ class PdfBoxAdapter : PdfEngineAdapter() {
         if (acroForm == null) return emptyList()
         return acroForm.fields.map { field ->
             FormField(
-                fieldName = field.partialFieldName,
+                fieldName = field.partialName ?: "",
                 fieldType = mapFormWidgetType(field.fieldType),
-                value = field.value?.toString(),
+                value = field.valueAsString,
                 isReadOnly = field.isReadOnly,
                 isRequired = field.isRequired
             )
@@ -428,7 +434,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
         )
         val acroForm = doc.documentCatalog.acroForm
             ?: throw EngineException(EngineError.UNSUPPORTED_FEATURE, "No form in document")
-        val field = acroForm.fields.find { it.partialFieldName == fieldId }
+        val field = acroForm.fields.find { it.partialName == fieldId }
             ?: throw EngineException(EngineError.OBJECT_NOT_FOUND, "Field not found: $fieldId")
         field.setValue(value)
     }
@@ -480,7 +486,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
     // ════════════════════════════════════════════════════════════
 
     private fun doExtractMetadata(doc: PDDocument): DocumentMetadata {
-        val info = doc.documentCatalog.documentInformation ?: return DocumentMetadata()
+        val info = doc.documentInformation ?: return DocumentMetadata()
         return DocumentMetadata(
             title = info.title,
             author = info.author,
@@ -503,7 +509,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
         if (access.canModifyAnnotations()) perms.add(PdfPermission.ADD_ANNOTATIONS)
         if (access.canFillInForm()) perms.add(PdfPermission.FILL_FORMS)
         if (access.canExtractForAccessibility()) perms.add(PdfPermission.EXTRACT)
-        if (access.canAssemble()) perms.add(PdfPermission.ASSEMBLE)
+        if (access.canAssembleDocument()) perms.add(PdfPermission.ASSEMBLE)
         if (access.canPrintDegraded()) perms.add(PdfPermission.PRINT_HIGH_RESOLUTION)
         return DocumentPermissions(
             isEncrypted = doc.isEncrypted,
@@ -554,9 +560,9 @@ class PdfBoxAdapter : PdfEngineAdapter() {
             val pageRef = dest.getPageNumber()
             if (pageRef >= 0) return pageRef
         }
-        // Try the action's destination
+        // Try the action's destination (PDActionGoTo has getDestination())
         val action = node.action
-        if (action != null) {
+        if (action is org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo) {
             val actionDest = action.destination
             if (actionDest is PDPageDestination) {
                 val page = actionDest.getPage()
