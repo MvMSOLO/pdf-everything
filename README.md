@@ -25,18 +25,18 @@ build_all.bat
 
 This script will:
 1. Generate the Android debug APK using `:composeApp:assembleDebug`.
-2. Generate the Windows Desktop executable using `:composeApp:packageDistributionForCurrentOS`.
+2. Generate a runnable Windows app image using `:composeApp:createDistributable`.
 
 ### Manual Build Commands
 
 If you prefer to run commands manually:
 
 - **Android APK**: `./gradlew :composeApp:assembleDebug`
-- **Windows EXE**: `./gradlew :composeApp:packageDistributionForCurrentOS`
+- **Windows EXE**: `./gradlew :composeApp:createDistributable`
 
 The build artifacts will be located in:
 - Android: `composeApp/build/outputs/apk/debug/`
-- Windows: `composeApp/build/compose/binaries/main/exe/`
+- Windows: `composeApp/build/compose/binaries/main/app/pdf-everything/pdf-everything.exe`
 
 ## Requirements
 
