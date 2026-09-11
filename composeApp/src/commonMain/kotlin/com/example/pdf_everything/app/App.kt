@@ -27,6 +27,7 @@ import com.example.pdf_everything.feature.viewer.ViewerScreen
  *    - Navigation via AppRouter
  * ═══════════════════════════════════════════════════════════════════════ */
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun App(
     platformService: PlatformService,

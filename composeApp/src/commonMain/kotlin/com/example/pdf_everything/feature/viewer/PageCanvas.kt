@@ -74,26 +74,7 @@ fun PageCanvas(
         }
 
         // Main canvas with gesture handling
-        val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
-            val newScale = (viewportState.zoomScale * zoomChange).coerceIn(
-                viewportState.minZoom, viewportState.maxZoom
-            )
-            viewportState.setZoomScale(newScale)
-            viewportState.scrollBy(panChange.x, panChange.y)
-            onZoomChanged(newScale, null, null)
-            onScrollChanged(viewportState.scrollOffsetX, viewportState.scrollOffsetY)
-        }
-        val gestureHandler = remember {
-            object {
-                fun onGesture(center: Offset, pan: Offset, zoom: Float) {
-                    val newScale = (viewportState.zoomScale * zoom).coerceIn(viewportState.minZoom, viewportState.maxZoom)
-                    viewportState.setZoomScale(newScale)
-                    viewportState.scrollBy(pan.x, pan.y)
-                    onZoomChanged(newScale, null, null)
-                    onScrollChanged(viewportState.scrollOffsetX, viewportState.scrollOffsetY)
-                }
-            }
-        }
+
 
         Canvas(
             modifier = Modifier
@@ -116,8 +97,14 @@ fun PageCanvas(
                     )
                 }
                 .pointerInput(Unit) {
-                    detectTransformGestures { center, pan, zoom, _ ->
-                        gestureHandler.onGesture(center, pan, zoom)
+                    detectTransformGestures { center, pan, zoom, rotation ->
+                        val newScale = (viewportState.zoomScale * zoom).coerceIn(
+                            viewportState.minZoom, viewportState.maxZoom
+                        )
+                        viewportState.setZoomScale(newScale)
+                        viewportState.scrollBy(pan.x, pan.y)
+                        onZoomChanged(newScale, null, null)
+                        onScrollChanged(viewportState.scrollOffsetX, viewportState.scrollOffsetY)
                     }
                 }
         ) {

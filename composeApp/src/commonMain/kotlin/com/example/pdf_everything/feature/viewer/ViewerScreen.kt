@@ -477,7 +477,7 @@ fun ViewerScreen(
                                     modifier = Modifier.fillMaxSize()
                                 )
 
-                                AnimatedVisibility(
+                                androidx.compose.animation.AnimatedVisibility(
                                     visible = viewModeState.showNavigationOverlay,
                                     enter = fadeIn(),
                                     exit = fadeOut()

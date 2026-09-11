@@ -16,8 +16,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import com.example.pdf_everything.core.document.Page
 import com.example.pdf_everything.core.document.PageRotation
+import com.example.pdf_everything.feature.viewer.CachedThumbnail
 import com.example.pdf_everything.ui.design_system.*
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -114,7 +116,7 @@ fun ThumbnailPanel(
             if (item.index in pages.indices) {
                 val page = pages[item.index]
                 // Check if cached
-                val cached = thumbnailCache.get(page.pageId)
+                val cached = thumbnailCache.get(page.pageId) // suspend call inside LaunchedEffect
                 if (cached == null) {
                     onRequestThumbnail(item.index)
                 }
@@ -139,7 +141,7 @@ fun ThumbnailPanel(
                 } else {
                     IconButton(onClick = { panelState.enterMultiSelect() }) {
                         Icon(
-                            imageVector = PdfIcons.SelectAll,
+                            imageVector = PdfIcons.Menu,
                             contentDescription = "Multi-select",
                             modifier = Modifier.size(20.dp)
                         )
@@ -201,7 +203,9 @@ private fun ThumbnailItem(
     onLongPress: () -> Unit,
     thumbnailCache: ThumbnailCache
 ) {
-    val cached = thumbnailCache.get(page.pageId)
+    val cached by produceState<CachedThumbnail?>(null, page.pageId) {
+        value = thumbnailCache.get(page.pageId)
+    }
 
     val borderColor = when {
         isCurrentPage -> MaterialTheme.colorScheme.primary
@@ -235,6 +239,7 @@ private fun ThumbnailItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Thumbnail preview area
+            val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
             Box(
                 modifier = Modifier
                     .width(80.dp)
@@ -251,7 +256,7 @@ private fun ThumbnailItem(
                         } else {
                             // Placeholder while loading
                             drawRect(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                color = placeholderColor,
                                 alpha = 0.5f
                             )
                             drawContent()
@@ -262,7 +267,7 @@ private fun ThumbnailItem(
                 // Rotation indicator
                 if (page.rotation != PageRotation.ROTATION_0) {
                     Icon(
-                        imageVector = PdfIcons.RotateRight,
+                        imageVector = PdfIcons.ArrowRight,
                         contentDescription = "Rotated ${page.rotation.degrees}°",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -281,7 +286,7 @@ private fun ThumbnailItem(
                            else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "${page.width.roundToInt()} × ${page.height.roundToInt()} pt",
+                    text = "${page.width.toInt()} × ${page.height.toInt()} pt",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -300,4 +305,3 @@ private fun ThumbnailItem(
     }
 }
 
-private fun Float.roundToInt(): Int = kotlin.math.roundToInt(this)
