@@ -44,7 +44,14 @@ class DocumentFileService(
 
     // ── Open ───────────────────────────────────────────────────────────
 
+    /** Open a file using the platform file picker (alias for openFromPicker). */
     suspend fun openFromPicker(
+        password: String? = null
+    ): EngineResult<Document> {
+        return openFromPickerInternal(password)
+    }
+
+    private suspend fun openFromPickerInternal(
         password: String? = null
     ): EngineResult<Document> {
         val source = platform.pickOpenFile() ?: return EngineResult.Failure(

@@ -14,7 +14,7 @@ import com.example.pdf_everything.core.services.AppState
  * Top-level composable for the entire application.
  *
  * Per spec: single AppBar at the App level that is VISIBLE on Home/Settings/About
- * but HIDDEN on Viewer/Editor routes (which have their own bars inside
+ * but HIDDEN on Viewer/Editor/FormFill routes (which have their own bars inside
  * ViewerScreen / EditorScreen).
  *
  * Undo/Redo wired to [AppState.commandDispatcher].
@@ -65,6 +65,7 @@ fun App(appState: AppState) {
                 HomeScreen(
                     router = router,
                     recentFiles = appState.documentFileService.recentFiles,
+                    appState = appState,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -82,18 +83,30 @@ fun App(appState: AppState) {
                     document = appState.currentDocument,
                     pdfEngine = appState.pdfEngine,
                     onBack = { router.popBackStack() },
+                    onEdit = { docId -> router.navigate(AppRoute.Editor(documentId = docId)) },
                     modifier = Modifier.padding(innerPadding)
                 )
             }
             is AppRoute.FormFill -> {
-                // Phase 2 placeholder
-                Text("Form Fill – coming in Phase 2", modifier = Modifier.padding(innerPadding))
+                // FormFill routes to ViewerScreen with form-fill mode enabled
+                ViewerScreen(
+                    document = appState.currentDocument,
+                    pdfEngine = appState.pdfEngine,
+                    onBack = { router.popBackStack() },
+                    modifier = Modifier.padding(innerPadding)
+                )
             }
             is AppRoute.Settings -> {
-                Text("Settings – coming in Phase 2", modifier = Modifier.padding(innerPadding))
+                SettingsScreen(
+                    router = router,
+                    modifier = Modifier.padding(innerPadding)
+                )
             }
             is AppRoute.About -> {
-                Text("About – coming in Phase 2", modifier = Modifier.padding(innerPadding))
+                AboutScreen(
+                    router = router,
+                    modifier = Modifier.padding(innerPadding)
+                )
             }
         }
     }
