@@ -196,6 +196,47 @@ class DocumentFileService(
         if (_recentFiles.size > 20) _recentFiles.removeLast()
     }
 
+    // ── Split / Merge per spec §33 ──────────────────────────────────────────
+
+    /**
+     * Split the current document by extracting pages [fromIndex..toIndex]
+     * into a brand-new Document.
+     *
+     * On desktop this delegates to [PdfBoxAdapter.splitDocument]; on Android
+     * the engine adapter must provide equivalent functionality.
+     */
+    suspend fun splitDocument(
+        documentId: String,
+        fromIndex: Int,
+        toIndex: Int
+    ): EngineResult<Document> {
+        val session = _openDocuments[documentId] ?: return EngineResult.Failure(
+            com.example.pdf_everything.core.services.EngineError.IO_ERROR,
+            "Document not open: $documentId"
+        )
+        // Delegate to the engine's split capability
+        return engine.splitDocument(documentId, fromIndex, toIndex)
+    }
+
+    /**
+     * Merge another document (identified by [otherDocumentId]) into the
+     * current document. The other document's pages are appended.
+     */
+    suspend fun mergeDocuments(
+        targetDocumentId: String,
+        sourceDocumentId: String
+    ): EngineResult<Unit> {
+        val targetSession = _openDocuments[targetDocumentId] ?: return EngineResult.Failure(
+            com.example.pdf_everything.core.services.EngineError.IO_ERROR,
+            "Target document not open: $targetDocumentId"
+        )
+        val sourceSession = _openDocuments[sourceDocumentId] ?: return EngineResult.Failure(
+            com.example.pdf_everything.core.services.EngineError.IO_ERROR,
+            "Source document not open: $sourceDocumentId"
+        )
+        return engine.mergeDocuments(targetDocumentId, sourceDocumentId)
+    }
+
     // ── Session data ──────────────────────────────────────────────────
 
     class DocumentSession(

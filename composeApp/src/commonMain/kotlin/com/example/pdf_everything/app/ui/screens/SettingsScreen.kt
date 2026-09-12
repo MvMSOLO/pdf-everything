@@ -10,34 +10,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.pdf_everything.app.router.AppRouter
+import com.example.pdf_everything.core.services.AppState
+import com.example.pdf_everything.core.settings.SettingsRepository
 import com.example.pdf_everything.ui.design_system.PdfIcons
 import com.example.pdf_everything.ui.design_system.Spacing
 
 /**
  * Settings screen per spec §44.
  * Sections: General, View, Editing, Performance, Files, Shortcuts, About.
- * All toggles are wired to real settings state — no fake/stub buttons (§0).
+ * All toggles are wired to real settings state via [SettingsRepository] —
+ * no fake/stub buttons (§0).  Values persist across sessions.
  */
 @Composable
 fun SettingsScreen(
     router: AppRouter,
+    appState: AppState,
     modifier: Modifier = Modifier
 ) {
-    // ── Real settings state (persisted via AppState in production) ──
-    var darkTheme by remember { mutableStateOf(false) }
-    var dynamicColor by remember { mutableStateOf(true) }
-    var language by remember { mutableStateOf("System") }
-    var showPageNumbers by remember { mutableStateOf(true) }
-    var defaultZoomMode by remember { mutableStateOf("Fit Width") }
-    var smoothScrolling by remember { mutableStateOf(true) }
-    var snapToPage by remember { mutableStateOf(false) }
-    var annotationToolbar by remember { mutableStateOf(true) }
-    var autoSave by remember { mutableStateOf(true) }
-    var autoSaveInterval by remember { mutableStateOf(30) }
-    var hardwareAccel by remember { mutableStateOf(true) }
-    var cacheSizeMb by remember { mutableStateOf(256) }
-    var maxRecentFiles by remember { mutableStateOf(20) }
-    var defaultSaveDir by remember { mutableStateOf("Documents/PDF Everything") }
+    val settings = appState.settingsRepository
 
     Scaffold(
         modifier = modifier,
@@ -64,60 +54,60 @@ fun SettingsScreen(
             // ── General ──
             item { SectionHeader("General") }
             item {
-                ToggleRow("Dark Theme", darkTheme) { darkTheme = it }
+                ToggleRow("Dark Theme", settings.darkTheme) { settings.setDarkTheme(it) }
             }
             item {
-                ToggleRow("Dynamic Color", dynamicColor) { dynamicColor = it }
+                ToggleRow("Dynamic Color", settings.dynamicColor) { settings.setDynamicColor(it) }
             }
             item {
-                DropdownRow("Language", language, listOf("System", "English", "Uzbek", "Russian", "Chinese")) { language = it }
+                DropdownRow("Language", settings.language, listOf("System", "English", "Uzbek", "Russian", "Chinese")) { settings.setLanguage(it) }
             }
 
             // ── View ──
             item { SectionHeader("View") }
             item {
-                ToggleRow("Show Page Numbers", showPageNumbers) { showPageNumbers = it }
+                ToggleRow("Show Page Numbers", settings.showPageNumbers) { settings.setShowPageNumbers(it) }
             }
             item {
-                DropdownRow("Default Zoom", defaultZoomMode, listOf("Fit Width", "Fit Page", "100%", "200%")) { defaultZoomMode = it }
+                DropdownRow("Default Zoom", settings.defaultZoomMode, listOf("Fit Width", "Fit Page", "100%", "200%")) { settings.setDefaultZoomMode(it) }
             }
             item {
-                ToggleRow("Smooth Scrolling", smoothScrolling) { smoothScrolling = it }
+                ToggleRow("Smooth Scrolling", settings.smoothScrolling) { settings.setSmoothScrolling(it) }
             }
             item {
-                ToggleRow("Snap to Page", snapToPage) { snapToPage = it }
+                ToggleRow("Snap to Page", settings.snapToPage) { settings.setSnapToPage(it) }
             }
 
             // ── Editing ──
             item { SectionHeader("Editing") }
             item {
-                ToggleRow("Annotation Toolbar", annotationToolbar) { annotationToolbar = it }
+                ToggleRow("Annotation Toolbar", settings.annotationToolbar) { settings.setAnnotationToolbar(it) }
             }
             item {
-                ToggleRow("Auto-save", autoSave) { autoSave = it }
+                ToggleRow("Auto-save", settings.autoSave) { settings.setAutoSave(it) }
             }
             item {
-                if (autoSave) {
-                    SliderRow("Auto-save interval", autoSaveInterval, 5..300, "${autoSaveInterval}s") { autoSaveInterval = it }
+                if (settings.autoSave) {
+                    SliderRow("Auto-save interval", settings.autoSaveInterval, 5..300, "${settings.autoSaveInterval}s") { settings.setAutoSaveInterval(it) }
                 }
             }
 
             // ── Performance ──
             item { SectionHeader("Performance") }
             item {
-                ToggleRow("Hardware Acceleration", hardwareAccel) { hardwareAccel = it }
+                ToggleRow("Hardware Acceleration", settings.hardwareAccel) { settings.setHardwareAccel(it) }
             }
             item {
-                SliderRow("Render cache size", cacheSizeMb, 64..1024, "${cacheSizeMb} MB") { cacheSizeMb = it }
+                SliderRow("Render cache size", settings.cacheSizeMb, 64..1024, "${settings.cacheSizeMb} MB") { settings.setCacheSizeMb(it) }
             }
 
             // ── Files ──
             item { SectionHeader("Files") }
             item {
-                SliderRow("Max recent files", maxRecentFiles, 5..50, "$maxRecentFiles") { maxRecentFiles = it }
+                SliderRow("Max recent files", settings.maxRecentFiles, 5..50, "${settings.maxRecentFiles}") { settings.setMaxRecentFiles(it) }
             }
             item {
-                DirectoryRow("Default save directory", defaultSaveDir) { defaultSaveDir = it }
+                DirectoryRow("Default save directory", settings.defaultSaveDir) { settings.setDefaultSaveDir(it) }
             }
 
             // ── Shortcuts ──

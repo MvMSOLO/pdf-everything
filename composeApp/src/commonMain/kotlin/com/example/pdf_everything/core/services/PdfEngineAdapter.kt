@@ -78,7 +78,7 @@ abstract class PdfEngineAdapter : PdfEngine {
 
     override suspend fun save(documentId: String, target: DocumentSource, config: SaveConfig): EngineResult<Unit> {
         requireReady()
-        requireCapability { it.canEditText || it.canEditImages || it.canEditAnnotations }
+        // Saving does NOT require edit capability — read-only docs can still be saved
         return wrap { doSave(documentId, target, config) }
     }
 
@@ -182,6 +182,17 @@ abstract class PdfEngineAdapter : PdfEngine {
         flattenForms: Boolean
     ) = wrap { doOptimize(documentId, compressImages, imageQuality, removeUnusedObjects, flattenForms) }
 
+    override suspend fun splitDocument(
+        documentId: String,
+        fromIndex: Int,
+        toIndex: Int
+    ): EngineResult<Document> = wrap { doSplitDocument(documentId, fromIndex, toIndex) }
+
+    override suspend fun mergeDocuments(
+        targetDocumentId: String,
+        sourceDocumentId: String
+    ): EngineResult<Unit> = wrap { doMergeDocuments(targetDocumentId, sourceDocumentId) }
+
     // ══════════════════════════════════════════════════════════════════
     //  Abstract hooks — subclass must implement for concrete library
     // ══════════════════════════════════════════════════════════════════
@@ -227,6 +238,17 @@ abstract class PdfEngineAdapter : PdfEngine {
         imageQuality: Int,
         removeUnusedObjects: Boolean,
         flattenForms: Boolean
+    )
+
+    protected abstract suspend fun doSplitDocument(
+        documentId: String,
+        fromIndex: Int,
+        toIndex: Int
+    ): Document
+
+    protected abstract suspend fun doMergeDocuments(
+        targetDocumentId: String,
+        sourceDocumentId: String
     )
 
     // ── Internal helpers ───────────────────────────────────────────────

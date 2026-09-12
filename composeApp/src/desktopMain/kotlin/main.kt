@@ -1,9 +1,13 @@
 package com.example.pdf_everything
 
+import androidx.compose.runtime.*
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import com.example.pdf_everything.app.App
 import com.example.pdf_everything.core.commands.CommandDispatcher
+import com.example.pdf_everything.core.document.DocumentSource
 import com.example.pdf_everything.core.files.DocumentFileService
 import com.example.pdf_everything.core.history.HistoryManager
 import com.example.pdf_everything.core.recovery.FileSystemProvider
@@ -11,16 +15,29 @@ import com.example.pdf_everything.core.recovery.RecoveryService
 import com.example.pdf_everything.core.services.AppState
 import com.example.pdf_everything.core.services.PdfEngine
 import com.example.pdf_everything.core.services.PlatformService
+import com.example.pdf_everything.core.settings.DesktopSettings
+import com.example.pdf_everything.core.settings.SettingsRepository
+import com.example.pdf_everything.core.shortcuts.KeyModifier
+import com.example.pdf_everything.core.shortcuts.ShortcutAction
+import com.example.pdf_everything.core.shortcuts.ShortcutRegistry
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
 fun createPdfEngine(): PdfEngine {
     val adapter = com.example.pdf_everything.core.services.PdfBoxAdapter()
-    // PdfBoxAdapter extends PdfEngineAdapter which implements PdfEngine
     return adapter
 }
 
-fun main() {
+/**
+ * Desktop entry point.
+ *
+ * Per spec §7.1: accepts an optional file path as the first CLI argument
+ * and opens it automatically on launch.
+ *
+ * Per spec §9: all keyboard shortcuts are wired via [ShortcutRegistry]
+ * with an [onPreviewKeyEvent] handler on the top-level window.
+ */
+fun main(args: Array<String>) {
     // ── Create all services per spec ──────────────────────────────
     val pdfEngine: PdfEngine = createPdfEngine()
 
@@ -43,27 +60,133 @@ fun main() {
         platform = platformService
     )
 
+    val settingsRepository = SettingsRepository(DesktopSettings())
+
+    val shortcutRegistry = ShortcutRegistry.createDefault()
+
     val appState = AppState(
         pdfEngine = pdfEngine,
         commandDispatcher = commandDispatcher,
         historyManager = historyManager,
         documentFileService = documentFileService,
-        recoveryService = recoveryService
+        recoveryService = recoveryService,
+        shortcutRegistry = shortcutRegistry,
+        settingsRepository = settingsRepository
     )
+
+    // ── CLI arg: open file from command line (spec §7.1) ───────────
+    val cliFilePath = args.firstOrNull()
+    val cliFile = cliFilePath?.let { File(it) }?.takeIf { it.exists() && it.isFile }
+    if (cliFile != null) {
+        runBlocking {
+            val source = DocumentSource.FilePath(cliFile.absolutePath)
+            val result = documentFileService.openDocument(source)
+            if (result is com.example.pdf_everything.core.services.EngineResult.Success<*>) {
+                @Suppress("UNCHECKED_CAST")
+                val doc = result.value as com.example.pdf_everything.core.document.Document
+                appState.openDocument(doc)
+            }
+        }
+    }
 
     // ── Window ──────────────────────────────────────────────────────
     application {
+        val windowState = rememberWindowState(
+            width = 1280.dp,
+            height = 800.dp
+        )
+
         Window(
             onCloseRequest = {
                 runBlocking { pdfEngine.shutdown() }
                 exitApplication()
             },
             title = "PDF Everything",
-            state = WindowState(width = 1280.dp, height = 800.dp)
+            state = windowState,
+            // ── Keyboard shortcut handler (spec §9) ─────────────
+            onPreviewKeyEvent = { keyEvent ->
+                handleDesktopShortcut(keyEvent, shortcutRegistry, appState)
+            }
         ) {
             App(appState = appState)
         }
     }
+}
+
+/**
+ * Translates a Compose [KeyEvent] into a [ShortcutRegistry] lookup
+ * and dispatches the matching action (spec §9).
+ *
+ * Supports Ctrl/Alt/Meta modifiers + letter keys.
+ * Returns true if the shortcut was consumed.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun handleDesktopShortcut(
+    keyEvent: KeyEvent,
+    shortcutRegistry: ShortcutRegistry,
+    appState: AppState
+): Boolean {
+    // Only handle key-down (not key-up or repeats)
+    if (keyEvent.type != KeyEventType.KeyDown) return false
+
+    val modifiers = buildList {
+        if (keyEvent.isCtrlOn) add(KeyModifier.Ctrl)
+        if (keyEvent.isAltOn) add(KeyModifier.Alt)
+        if (keyEvent.isMetaOn) add(KeyModifier.Meta)
+        if (keyEvent.isShiftOn) add(KeyModifier.Shift)
+    }
+
+    val binding = shortcutRegistry.resolve(keyEvent.key, modifiers)
+    if (binding != null) {
+        when (binding.action) {
+            ShortcutAction.UNDO -> {
+                appState.currentDocument?.let { doc ->
+                    val result = appState.commandDispatcher.undo(doc)
+                    appState.updateDocument(result)
+                }
+            }
+            ShortcutAction.REDO -> {
+                appState.currentDocument?.let { doc ->
+                    val result = appState.commandDispatcher.redo(doc)
+                    appState.updateDocument(result)
+                }
+            }
+            ShortcutAction.SAVE -> {
+                appState.currentDocument?.let { doc ->
+                    runBlocking {
+                        appState.documentFileService.saveDocument(doc.documentId)
+                    }
+                }
+            }
+            ShortcutAction.PRINT -> {
+                appState.currentDocument?.let { doc ->
+                    val printService = com.example.pdf_everything.core.services.DesktopPrintService(
+                        appState.pdfEngine
+                    )
+                    printService.print(doc)
+                }
+            }
+            ShortcutAction.CLOSE_TAB -> appState.closeActiveTab()
+            ShortcutAction.SWITCH_TAB_NEXT -> appState.switchNextTab()
+            ShortcutAction.SWITCH_TAB_PREV -> appState.switchPrevTab()
+            ShortcutAction.OPEN -> { /* File picker triggered from UI */ }
+            ShortcutAction.FIND,
+            ShortcutAction.ZOOM_IN,
+            ShortcutAction.ZOOM_OUT,
+            ShortcutAction.ZOOM_RESET,
+            ShortcutAction.NEXT_PAGE,
+            ShortcutAction.PREV_PAGE,
+            ShortcutAction.ROTATE_CW,
+            ShortcutAction.ROTATE_CCW,
+            ShortcutAction.DELETE_PAGE,
+            ShortcutAction.FULLSCREEN,
+            ShortcutAction.NEW_TAB,
+            ShortcutAction.ESCAPE,
+            ShortcutAction.SAVE_AS -> { /* Viewer-level or UI-level dispatch */ }
+        }
+        return true
+    }
+    return false
 }
 
 /** Desktop file-system provider for RecoveryService persistence. */

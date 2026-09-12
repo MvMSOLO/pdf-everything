@@ -286,4 +286,19 @@ interface PdfEngine {
         removeUnusedObjects: Boolean = true,
         flattenForms: Boolean = false
     ): EngineResult<Unit>
+
+    // ── Split / Merge ───────────────────────────────────────────────────
+
+    /** Split pages [fromIndex..toIndex] into a new Document. */
+    suspend fun splitDocument(
+        documentId: String,
+        fromIndex: Int,
+        toIndex: Int
+    ): EngineResult<Document>
+
+    /** Merge source document pages into the target document. */
+    suspend fun mergeDocuments(
+        targetDocumentId: String,
+        sourceDocumentId: String
+    ): EngineResult<Unit>
 }

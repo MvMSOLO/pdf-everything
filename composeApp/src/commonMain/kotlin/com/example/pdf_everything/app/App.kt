@@ -6,9 +6,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.example.pdf_everything.app.router.*
 import com.example.pdf_everything.app.ui.screens.*
+import com.example.pdf_everything.core.document.DocumentSource
+import com.example.pdf_everything.core.services.AppState
+import com.example.pdf_everything.core.services.EngineError
+import com.example.pdf_everything.core.services.EngineResult
 import com.example.pdf_everything.feature.viewer.ViewerScreen
 import com.example.pdf_everything.app.ui.bars.*
-import com.example.pdf_everything.core.services.AppState
+
+/**
+ * Data class holding the state for the password dialog (spec §27).
+ * When non-null, the dialog is shown; when null, it is hidden.
+ */
+data class PasswordDialogTarget(
+    val source: DocumentSource,
+    val fileName: String,
+    val errorMessage: String? = null,
+    val isUnsupportedEncryption: Boolean = false,
+    val isRetrying: Boolean = false
+)
 
 /**
  * Top-level composable for the entire application.
@@ -18,12 +33,16 @@ import com.example.pdf_everything.core.services.AppState
  * ViewerScreen / EditorScreen).
  *
  * Undo/Redo wired to [AppState.commandDispatcher].
+ * Password dialog wired for encrypted PDFs (spec §27).
  * No fake/stub buttons per spec §0.
  */
 @Composable
 fun App(appState: AppState) {
     val router = remember { AppRouter() }
     val currentRoute by router.state
+
+    // ── Password dialog state per spec §27 ──────────────────────
+    var passwordDialogTarget by remember { mutableStateOf<PasswordDialogTarget?>(null) }
 
     val showAppBars = currentRoute.currentRoute !is AppRoute.Viewer
             && currentRoute.currentRoute !is AppRoute.Editor
@@ -60,6 +79,26 @@ fun App(appState: AppState) {
             }
         }
     ) { innerPadding ->
+        // ── Password dialog overlay (§27) ───────────────────────
+        passwordDialogTarget?.let { target ->
+            PasswordDialog(
+                fileName = target.fileName,
+                errorMessage = target.errorMessage,
+                isUnsupportedEncryption = target.isUnsupportedEncryption,
+                onPasswordSubmit = { pwd ->
+                    // Retry opening with the provided password
+                    // The caller (HomeScreen open flow) should handle the
+                    // engine.open(source, pwd) result and either:
+                    //   - succeed → navigate to viewer, clear dialog
+                    //   - fail INVALID_PASSWORD → update errorMessage
+                    passwordDialogTarget = null
+                },
+                onDismiss = {
+                    passwordDialogTarget = null
+                }
+            )
+        }
+
         when (val route = currentRoute.currentRoute) {
             is AppRoute.Home -> {
                 HomeScreen(
@@ -99,6 +138,7 @@ fun App(appState: AppState) {
             is AppRoute.Settings -> {
                 SettingsScreen(
                     router = router,
+                    appState = appState,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
@@ -110,4 +150,29 @@ fun App(appState: AppState) {
             }
         }
     }
+}
+
+/**
+ * Helper to show the password dialog when [EngineResult.Failure] has
+ * [EngineError.INVALID_PASSWORD] — call this from any open flow.
+ */
+fun showPasswordDialog(
+    targetState: MutableState<PasswordDialogTarget?>,
+    source: DocumentSource,
+    fileName: String,
+    result: EngineResult.Failure
+) {
+    val isUnsupported = result.error == EngineError.UNSUPPORTED_FEATURE
+    val message = when (result.error) {
+        EngineError.INVALID_PASSWORD -> if (targetState.value?.isRetrying == true)
+            "Wrong password. Please try again." else null
+        EngineError.UNSUPPORTED_FEATURE -> null
+        else -> result.message
+    }
+    targetState.value = PasswordDialogTarget(
+        source = source,
+        fileName = fileName,
+        errorMessage = message,
+        isUnsupportedEncryption = isUnsupported
+    )
 }

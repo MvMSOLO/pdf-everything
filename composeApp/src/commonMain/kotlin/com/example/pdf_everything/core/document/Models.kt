@@ -589,7 +589,15 @@ data class Document(
 data class FormModel(
     val fields: List<FormField> = emptyList(),
     val hasAcroForm: Boolean = false
-)
+) {
+    /** Return a new FormModel with [fieldName] set to [value]. */
+    fun withFieldUpdated(fieldName: String, value: String): FormModel {
+        val updated = fields.map { field ->
+            if (field.fieldName == fieldName) field.copy(value = value) else field
+        }
+        return copy(fields = updated)
+    }
+}
 
 data class FormField(
     val fieldName: String,

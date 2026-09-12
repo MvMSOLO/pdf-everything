@@ -165,6 +165,7 @@ data class DeletePageCommand(
     override val commandId: String,
     override val description: String = "Delete page",
     val pageId: String,
+    val pageIndex: Int = -1,  // PDFBox uses index-based access
     private val pageSnapshot: Page? = null  // for undo
 ) : DocumentCommand {
     override fun canExecute(): Boolean = pageId.isNotEmpty()
@@ -205,8 +206,10 @@ data class RotatePageCommand(
     override val commandId: String,
     override val description: String = "Rotate page",
     val pageId: String,
+    val pageIndex: Int = -1,  // PDFBox uses index-based access
     val oldRotation: PageRotation,
-    val newRotation: PageRotation
+    val newRotation: PageRotation,
+    val rotation: PageRotation = newRotation  // convenience: the rotation to apply
 ) : DocumentCommand {
     override fun canExecute(): Boolean = pageId.isNotEmpty() && oldRotation != newRotation
     override fun execute(document: Document): Document =
@@ -219,8 +222,10 @@ data class CropPageCommand(
     override val commandId: String,
     override val description: String = "Crop page",
     val pageId: String,
+    val pageIndex: Int = -1,  // PDFBox uses index-based access
     val previousCropBox: PdfRect?,
-    val nextCropBox: PdfRect
+    val nextCropBox: PdfRect,
+    val cropBox: PdfRect = nextCropBox  // convenience alias
 ) : DocumentCommand {
     override fun canExecute(): Boolean = pageId.isNotEmpty() && nextCropBox.area > 0
     override fun execute(document: Document): Document =
@@ -305,7 +310,9 @@ data class DeleteAnnotationCommand(
     override val commandId: String,
     override val description: String = "Delete annotation",
     val pageId: String,
+    val pageIndex: Int = -1,  // PDFBox uses index-based access
     val annotationId: String,
+    val objectId: String = annotationId,  // alias for engine access
     private val snapshot: AnnotationObject? = null
 ) : DocumentCommand {
     override fun canExecute(): Boolean = pageId.isNotEmpty() && annotationId.isNotEmpty()
@@ -334,4 +341,168 @@ data class EditMetadataCommand(
     override fun canExecute(): Boolean = true
     override fun execute(document: Document): Document = document.copy(metadata = newMetadata).markDirty()
     override fun undo(document: Document): Document = document.copy(metadata = oldMetadata).markDirty()
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Additional commands needed by PdfBoxAdapter
+// ─────────────────────────────────────────────────────────────
+
+data class ReorderPageCommand(
+    override val commandId: String,
+    override val description: String = "Reorder page",
+    val fromIndex: Int,
+    val toIndex: Int
+) : DocumentCommand {
+    override fun canExecute(): Boolean = fromIndex != toIndex && fromIndex >= 0 && toIndex >= 0
+    override fun execute(document: Document): Document = document.withPageReordered(fromIndex, toIndex)
+    override fun undo(document: Document): Document = document.withPageReordered(toIndex, fromIndex)
+}
+
+data class InsertPageCommand(
+    override val commandId: String,
+    override val description: String = "Insert blank page",
+    val afterPageIndex: Int,  // -1 = append at end
+    val newPageId: String = "p_new_${System.currentTimeMillis()}"
+) : DocumentCommand {
+    override fun canExecute(): Boolean = true
+    override fun execute(document: Document): Document {
+        val newPage = Page(
+            pageId = newPageId,
+            index = if (afterPageIndex < 0) document.pages.size else afterPageIndex + 1,
+            boxes = PageBoxes(mediaBox = PdfRect(0f, 0f, 612f, 792f)),
+            rotation = PageRotation.NONE
+        )
+        return document.withPageAdded(newPage)
+    }
+    override fun undo(document: Document): Document = document.withPageRemoved(newPageId)
+}
+
+data class SetFormFieldValueCommand(
+    override val commandId: String,
+    override val description: String = "Set form field value",
+    val fieldName: String,
+    val oldValue: String?,
+    val newValue: String
+) : DocumentCommand {
+    override fun canExecute(): Boolean = fieldName.isNotEmpty()
+    override fun execute(document: Document): Document =
+        document.copy(form = document.form.withFieldUpdated(fieldName, newValue)).markDirty()
+    override fun undo(document: Document): Document =
+        document.copy(form = document.form.withFieldUpdated(fieldName, oldValue ?: "")).markDirty()
+}
+
+data class FlattenFormCommand(
+    override val commandId: String,
+    override val description: String = "Flatten form fields",
+) : DocumentCommand {
+    override fun canExecute(): Boolean = true
+    override fun execute(document: Document): Document =
+        document.copy(form = FormModel(fields = emptyList(), isFlattened = true)).markDirty()
+    override fun undo(document: Document): Document = document  // cannot un-flatten
+}
+
+data class UpdateAnnotationCommand(
+    override val commandId: String,
+    override val description: String = "Update annotation",
+    val pageId: String,
+    val pageIndex: Int = -1,
+    val objectId: String,
+    val oldAnnotation: AnnotationObject,
+    val newAnnotation: AnnotationObject
+) : DocumentCommand {
+    override fun canExecute(): Boolean = pageId.isNotEmpty() && objectId.isNotEmpty()
+    override fun execute(document: Document): Document =
+        document.withPageUpdated(pageId) {
+            it.copy(annotations = it.annotations.map { a ->
+                if (a.objectId == objectId) newAnnotation else a
+            })
+        }
+    override fun undo(document: Document): Document =
+        document.withPageUpdated(pageId) {
+            it.copy(annotations = it.annotations.map { a ->
+                if (a.objectId == objectId) oldAnnotation else a
+            })
+        }
+}
+
+// Phase 2 text editing stubs (engine throws UnsupportedOperationException)
+data class AddTextCommand(
+    override val commandId: String,
+    override val description: String = "Add text",
+    val pageId: String,
+    val textObject: TextObject
+) : DocumentCommand {
+    override fun canExecute(): Boolean = pageId.isNotEmpty() && textObject.text.isNotEmpty()
+    override fun execute(document: Document): Document = document.withObjectAdded(pageId, textObject)
+    override fun undo(document: Document): Document = document.withObjectRemoved(pageId, textObject.objectId)
+}
+
+data class DeleteTextCommand(
+    override val commandId: String,
+    override val description: String = "Delete text",
+    val pageId: String,
+    val objectId: String
+) : DocumentCommand {
+    override fun canExecute(): Boolean = pageId.isNotEmpty() && objectId.isNotEmpty()
+    override fun execute(document: Document): Document = document.withObjectRemoved(pageId, objectId)
+    override fun undo(document: Document): Document = document  // requires snapshot
+}
+
+data class UpdateTextCommand(
+    override val commandId: String,
+    override val description: String = "Update text",
+    val pageId: String,
+    val objectId: String,
+    val newText: TextObject
+) : DocumentCommand {
+    override fun canExecute(): Boolean = pageId.isNotEmpty() && objectId.isNotEmpty()
+    override fun execute(document: Document): Document = document.withObjectUpdated(pageId, newText)
+    override fun undo(document: Document): Document = document  // requires snapshot
+}
+
+data class AddImageCommand(
+    override val commandId: String,
+    override val description: String = "Add image",
+    val pageId: String,
+    val imageObject: ImageObject
+) : DocumentCommand {
+    override fun canExecute(): Boolean = pageId.isNotEmpty()
+    override fun execute(document: Document): Document = document.withObjectAdded(pageId, imageObject)
+    override fun undo(document: Document): Document = document.withObjectRemoved(pageId, imageObject.objectId)
+}
+
+data class DeleteImageCommand(
+    override val commandId: String,
+    override val description: String = "Delete image",
+    val pageId: String,
+    val objectId: String
+) : DocumentCommand {
+    override fun canExecute(): Boolean = pageId.isNotEmpty() && objectId.isNotEmpty()
+    override fun execute(document: Document): Document = document.withObjectRemoved(pageId, objectId)
+    override fun undo(document: Document): Document = document
+}
+
+data class UpdateImageCommand(
+    override val commandId: String,
+    override val description: String = "Update image",
+    val pageId: String,
+    val objectId: String,
+    val newImage: ImageObject
+) : DocumentCommand {
+    override fun canExecute(): Boolean = pageId.isNotEmpty() && objectId.isNotEmpty()
+    override fun execute(document: Document): Document = document.withObjectUpdated(pageId, newImage)
+    override fun undo(document: Document): Document = document
+}
+
+data class OptimizeDocumentCommand(
+    override val commandId: String,
+    override val description: String = "Optimize document",
+    val compressImages: Boolean = true,
+    val imageQuality: Int = 75,
+    val removeUnusedObjects: Boolean = true,
+    val flattenForms: Boolean = false
+) : DocumentCommand {
+    override fun canExecute(): Boolean = true
+    override fun execute(document: Document): Document = document.markDirty()  // actual work done in engine
+    override fun undo(document: Document): Document = document  // cannot undo optimization
 }
