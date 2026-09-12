@@ -2,14 +2,7 @@
 setlocal
 
 if not defined JAVA_HOME (
-    echo JAVA_HOME must point to a JDK 17 installation.
-    exit /b 1
-)
-
-for /f "tokens=3" %%V in ('"%JAVA_HOME%\bin\java.exe" -version 2^>^&1') do if not defined JAVA_VERSION set "JAVA_VERSION=%%~V"
-if not "%JAVA_VERSION:~0,3%"=="17." (
-    echo This project requires JDK 17 for reliable Windows jpackage builds.
-    echo Current JAVA_HOME: %JAVA_HOME%
+    echo JAVA_HOME must point to a JDK installation.
     exit /b 1
 )
 
