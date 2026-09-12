@@ -112,7 +112,11 @@ class ShortcutRegistry {
     }
 
     private fun resolveInternal(
-        // Try current mode first, then GLOBAL
+        ctrl: Boolean,
+        alt: Boolean,
+        shift: Boolean,
+        key: String
+    ): ShortcutAction? {
         val modeOrder = listOf(_currentMode, ShortcutMode.GLOBAL)
         for (mode in modeOrder) {
             val match = bindings.find {
@@ -145,7 +149,7 @@ class ShortcutRegistry {
                 androidx.compose.ui.input.key.Key.PageUp -> "PageUp"
                 androidx.compose.ui.input.key.Key.PageDown -> "PageDown"
                 androidx.compose.ui.input.key.Key.F1 -> "F1"
-                else -> key.name.removePrefix("Key_")
+                else -> key.toString().removePrefix("Key: ")
             }
 
         /** Create a registry pre-loaded with standard shortcuts per spec §9. */

@@ -270,6 +270,7 @@ data class AddAnnotationCommand(
     override val commandId: String,
     override val description: String = "Add annotation",
     val pageId: String,
+    val pageIndex: Int = -1,
     val annotation: AnnotationObject
 ) : DocumentCommand {
     override fun canExecute(): Boolean = pageId.isNotEmpty()
@@ -370,7 +371,7 @@ data class InsertPageCommand(
             pageId = newPageId,
             index = if (afterPageIndex < 0) document.pages.size else afterPageIndex + 1,
             boxes = PageBoxes(mediaBox = PdfRect(0f, 0f, 612f, 792f)),
-            rotation = PageRotation.NONE
+            rotation = PageRotation.ROTATION_0
         )
         return document.withPageAdded(newPage)
     }
@@ -385,10 +386,14 @@ data class SetFormFieldValueCommand(
     val newValue: String
 ) : DocumentCommand {
     override fun canExecute(): Boolean = fieldName.isNotEmpty()
-    override fun execute(document: Document): Document =
-        document.copy(form = document.form.withFieldUpdated(fieldName, newValue)).markDirty()
-    override fun undo(document: Document): Document =
-        document.copy(form = document.form.withFieldUpdated(fieldName, oldValue ?: "")).markDirty()
+    override fun execute(document: Document): Document {
+        val currentModel = document.formModel ?: FormModel()
+        return document.copy(formModel = currentModel.withFieldUpdated(fieldName, newValue)).markDirty()
+    }
+    override fun undo(document: Document): Document {
+        val currentModel = document.formModel ?: FormModel()
+        return document.copy(formModel = currentModel.withFieldUpdated(fieldName, oldValue ?: "")).markDirty()
+    }
 }
 
 data class FlattenFormCommand(
@@ -397,7 +402,7 @@ data class FlattenFormCommand(
 ) : DocumentCommand {
     override fun canExecute(): Boolean = true
     override fun execute(document: Document): Document =
-        document.copy(form = FormModel(fields = emptyList(), isFlattened = true)).markDirty()
+        document.copy(formModel = FormModel(fields = emptyList(), hasAcroForm = false)).markDirty()
     override fun undo(document: Document): Document = document  // cannot un-flatten
 }
 

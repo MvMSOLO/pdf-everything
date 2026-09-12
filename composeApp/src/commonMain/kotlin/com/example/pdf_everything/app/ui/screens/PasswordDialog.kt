@@ -3,6 +3,9 @@ package com.example.pdf_everything.app.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,9 +80,9 @@ fun PasswordDialog(
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                             Icon(
                                 imageVector = if (passwordVisible)
-                                    androidx.compose.material.icons.Icons.Default.Visibility
+                                    Icons.Filled.Visibility
                                 else
-                                    androidx.compose.material.icons.Icons.Default.VisibilityOff,
+                                    Icons.Filled.VisibilityOff,
                                 contentDescription = if (passwordVisible) "Hide password" else "Show password"
                             )
                         }

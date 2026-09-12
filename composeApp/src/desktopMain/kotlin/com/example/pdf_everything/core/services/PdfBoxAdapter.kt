@@ -15,7 +15,7 @@ import org.apache.pdfbox.text.PDFTextStripper
 import org.apache.pdfbox.text.PDFTextStripperByArea
 import org.apache.pdfbox.cos.COSName
 import org.apache.pdfbox.cos.COSObject
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation
+import org.apache.pdfbox.pdmodel.interactive.annotation.*
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject
 import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage
 import java.awt.image.BufferedImage
@@ -520,10 +520,10 @@ class PdfBoxAdapter : PdfEngineAdapter() {
                 val insertAt = if (from < to) to - 1 else to
                 // PDFBox doesn't have a direct insertPageAt; use COSArray manipulation
                 val pages = doc.documentCatalog.pages
-                val pagesCOS = pages.cOSObject
+                val pagesCOS = pages.cosObject
                 val kids = pagesCOS.getDictionaryObject(COSName.KIDS) as? org.apache.pdfbox.cos.COSArray
                     ?: throw EngineException(EngineError.UNSUPPORTED_FEATURE, "Cannot reorder pages")
-                kids.add(insertAt, page.cOSObject)
+                kids.add(insertAt, page.cosObject)
             }
 
             // ── Insert blank page ─────────────────────────
@@ -544,8 +544,8 @@ class PdfBoxAdapter : PdfEngineAdapter() {
                     val page = doc.getPage(lastIdx)
                     doc.removePage(lastIdx)
                     val pages = doc.documentCatalog.pages
-                    val kids = pages.cOSObject.getDictionaryObject(COSName.KIDS) as org.apache.pdfbox.cos.COSArray
-                    kids.add(command.afterPageIndex + 1, page.cOSObject)
+                    val kids = pages.cosObject.getDictionaryObject(COSName.KIDS) as org.apache.pdfbox.cos.COSArray
+                    kids.add(command.afterPageIndex + 1, page.cosObject)
                 }
             }
 
@@ -562,7 +562,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
 
             // ── Set form field value ─────────────────────
             is SetFormFieldValueCommand -> {
-                doSetFormFieldValue(documentId, command.fieldName, command.value)
+                doSetFormFieldValue(documentId, command.fieldName, command.newValue)
             }
 
             // ── Flatten form ───────────────────────────────
@@ -589,7 +589,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
             }
 
             is DeleteAnnotationCommand -> {
-                val pageIdx = command.pageIndex
+                val pageIdx = if (command.pageIndex >= 0) command.pageIndex else 0
                 if (pageIdx < 0 || pageIdx >= doc.numberOfPages)
                     throw EngineException(EngineError.PAGE_NOT_FOUND, "Page $pageIdx not found")
                 val pdPage = doc.getPage(pageIdx)
@@ -677,7 +677,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
                 val page = doc.getPage(idx)
                 val resources = page.resources
                 if (resources != null) {
-                    val xobjects = resources.getXObjectNames
+                    val xobjects = resources.xObjectNames
                     for (name in xobjects) {
                         try {
                             val xobject = resources.getXObject(name)
@@ -732,7 +732,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
             // PDFBox 2.x: PDDocument has no direct removeUnusedObjects,
             // but we can use the low-level COSDoc.cleanup()
             try {
-                doc.document.cOSDocument?.dereferencedObjects?.clear()
+                doc.document.objects.clear()
                 // Also trim the xref table by saving and reloading
                 val baos = ByteArrayOutputStream()
                 doc.save(baos)
@@ -795,7 +795,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
      * Returns the raw PDDocument — caller is responsible for closing it.
      * Low-level API for DesktopPrintService or other direct consumers.
      */
-    fun splitDocument(documentId: String, fromIndex: Int, toIndex: Int): PDDocument {
+    fun splitPDDocument(documentId: String, fromIndex: Int, toIndex: Int): PDDocument {
         val doc = docs[documentId] ?: throw EngineException(
             EngineError.IO_ERROR, "Document not open: $documentId"
         )
@@ -813,7 +813,7 @@ class PdfBoxAdapter : PdfEngineAdapter() {
      * Merge another PDDocument into the current one (pages appended).
      * Low-level API for direct consumers.
      */
-    fun mergeDocument(documentId: String, otherDoc: PDDocument) {
+    fun mergePDDocument(documentId: String, otherDoc: PDDocument) {
         val doc = docs[documentId] ?: throw EngineException(
             EngineError.IO_ERROR, "Document not open: $documentId"
         )
@@ -832,46 +832,38 @@ class PdfBoxAdapter : PdfEngineAdapter() {
     //  Private helpers
     // ════════════════════════════════════════════════════════════
 
-    private fun createPdfBoxAnnotation(annotation: AnnotationObject): PDAnnotation {
-        // Create an annotation from our model — Phase 1 supports text/sticky notes
-        // In PDFBox 2.x, there is no PDAnnotation.createPDAnnotation();
-        // instead we create specific subtypes via COSDictionary.
-        val subType = when (annotation.annotationType) {
-            AnnotationType.STICKY_NOTE -> COSName.TEXT
-            AnnotationType.HIGHLIGHT -> COSName.HIGHLIGHT
-            AnnotationType.UNDERLINE -> COSName.UNDERLINE
-            AnnotationType.STRIKEOUT -> COSName.STRIKEOUT
-            AnnotationType.FREEHAND -> COSName.INK
-            AnnotationType.RECTANGLE -> COSName.SQUARE
-            AnnotationType.ELLIPSE -> COSName.CIRCLE
-            AnnotationType.LINE -> COSName.LINE
-            AnnotationType.LINK -> COSName.LINK
-            AnnotationType.STAMP -> COSName.STAMP
-            AnnotationType.ATTACHMENT -> COSName.FILEATTACHMENT
-            else -> COSName.TEXT
-        }
+                private fun createPdfBoxAnnotation(annotation: AnnotationObject): PDAnnotation {
         val cosDict = org.apache.pdfbox.cos.COSDictionary()
         cosDict.setItem(COSName.TYPE, COSName.ANNOT)
+
+        val subtypeName = when (annotation.annotationType) {
+            AnnotationType.STICKY_NOTE, AnnotationType.TEXT_NOTE -> "Text"
+            AnnotationType.HIGHLIGHT -> "Highlight"
+            AnnotationType.UNDERLINE -> "Underline"
+            AnnotationType.STRIKEOUT -> "StrikeOut"
+            AnnotationType.FREEHAND -> "Ink"
+            AnnotationType.RECTANGLE -> "Square"
+            AnnotationType.ELLIPSE -> "Circle"
+            AnnotationType.LINE, AnnotationType.ARROW -> "Line"
+            AnnotationType.LINK -> "Link"
+            AnnotationType.STAMP -> "Stamp"
+            AnnotationType.ATTACHMENT -> "FileAttachment"
+            else -> "Text"
+        }
+        val subType = COSName.getPDFName(subtypeName)
         cosDict.setItem(COSName.SUBTYPE, subType)
         cosDict.setString(COSName.T, annotation.author ?: "")
         cosDict.setString(COSName.CONTENTS, annotation.contents ?: "")
         val rect = annotation.boundingBox
-        cosDict.setRectangle(
-            COSName.RECT,
-            PDRectangle(rect.x, rect.y, rect.width, rect.height)
-        )
-        // Build the correct PDAnnotation subclass via the COSDictionary
-        return when (subType) {
-            COSName.TEXT -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText(cosDict)
-            COSName.HIGHLIGHT -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationHighlight(cosDict)
-            COSName.UNDERLINE -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationUnderline(cosDict)
-            COSName.STRIKEOUT -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationStrikeout(cosDict)
-            COSName.INK -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationInk(cosDict)
-            COSName.SQUARE -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationSquareCircle(cosDict)
-            COSName.CIRCLE -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationSquareCircle(cosDict)
-            COSName.LINE -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLine(cosDict)
-            COSName.LINK -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink(cosDict)
-            else -> PDAnnotation(cosDict)  // generic fallback
+        val pdRect = PDRectangle(rect.x, rect.y, rect.width, rect.height)
+        cosDict.setItem(COSName.RECT, pdRect.cosObject)
+
+        return when (subtypeName) {
+            "Highlight", "Underline", "StrikeOut" -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup(cosDict)
+            "Square", "Circle" -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationSquareCircle(cosDict)
+            "Line" -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLine(cosDict)
+            "Link" -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink(cosDict)
+            else -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText(cosDict)
         }
     }
 

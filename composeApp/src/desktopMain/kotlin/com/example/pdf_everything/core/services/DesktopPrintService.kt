@@ -10,6 +10,7 @@ import java.awt.print.PrinterException
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.print.Paper
+import com.example.pdf_everything.core.document.Document
 
 /**
  * Real desktop printing per spec §18.
@@ -41,6 +42,10 @@ class DesktopPrintService(
     enum class PrintOrientation { AUTO, PORTRAIT, LANDSCAPE }
     enum class PrintScaling { FIT_TO_PRINTABLE, ACTUAL_SIZE, CUSTOM }
     enum class PrintColorMode { AUTO, COLOR, GRAYSCALE }
+
+    fun print(document: Document): Boolean {
+        return print(PrintConfig(documentId = document.documentId))
+    }
 
     /**
      * Show the native print dialog and print the document.
@@ -97,12 +102,8 @@ class DesktopPrintService(
         val paper = Paper()
 
         val mediaBox = page.mediaBox
-        val pdfWidthPt = mediaBox.width   // 1 pt = 1/72 inch
-        val pdfHeightPt = mediaBox.height
-
-        // Convert PDF points to inches (72 pts/inch)
-        val widthInch = pdfWidthPt / 72.0
-        val heightInch = pdfHeightPt / 72.0
+        val pdfWidthPt = mediaBox.width.toDouble()   // 1 pt = 1/72 inch
+        val pdfHeightPt = mediaBox.height.toDouble()
 
         // Set paper size in points
         paper.setSize(pdfWidthPt, pdfHeightPt)
@@ -142,7 +143,7 @@ class DesktopPrintService(
     ) : Printable {
 
         override fun print(graphics: Graphics, pageFormat: PageFormat, pIndex: Int): Int {
-            if (pIndex != 0) return NO_SUCH_PAGE  // we only handle our assigned page
+            if (pIndex != 0) return Printable.NO_SUCH_PAGE  // we only handle our assigned page
 
             val g2d = graphics as Graphics2D
             g2d.translate(pageFormat.imageableX, pageFormat.imageableY)
@@ -151,7 +152,7 @@ class DesktopPrintService(
             val imageableH = pageFormat.imageableHeight
 
             // Determine DPI for rendering
-            val printerRes = g2d.deviceConfiguration.transform.scaleX * 72.0
+            val printerRes = g2d.transform.scaleX * 72.0
             val renderDpi = (if (printerRes > 0) printerRes else 300.0).toFloat().coerceIn(72f, 600f)
 
             // Render the PDF page at the target DPI
@@ -165,7 +166,7 @@ class DesktopPrintService(
                 PrintScaling.FIT_TO_PRINTABLE -> {
                     val sx = imageableW / bImage.width
                     val sy = imageableH / bImage.height
-                    minOf(sx, sy)
+                    kotlin.math.min(sx, sy)
                 }
                 PrintScaling.ACTUAL_SIZE -> 1.0
                 PrintScaling.CUSTOM -> config.customScale.toDouble()
@@ -180,7 +181,7 @@ class DesktopPrintService(
 
             g2d.drawImage(bImage, dx.toInt(), dy.toInt(), drawW.toInt(), drawH.toInt(), null)
 
-            return PAGE_EXISTS
+            return Printable.PAGE_EXISTS
         }
     }
 }
