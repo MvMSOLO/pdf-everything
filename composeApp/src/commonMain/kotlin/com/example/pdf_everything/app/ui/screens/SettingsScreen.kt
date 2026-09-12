@@ -2,13 +2,11 @@ package com.example.pdf_everything.app.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.example.pdf_everything.app.router.AppRouter
 import com.example.pdf_everything.core.services.AppState
 import com.example.pdf_everything.core.settings.SettingsRepository
@@ -21,6 +19,7 @@ import com.example.pdf_everything.ui.design_system.Spacing
  * All toggles are wired to real settings state via [SettingsRepository] —
  * no fake/stub buttons (§0).  Values persist across sessions.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     router: AppRouter,
@@ -54,60 +53,60 @@ fun SettingsScreen(
             // ── General ──
             item { SectionHeader("General") }
             item {
-                ToggleRow("Dark Theme", settings.darkTheme) { settings.setDarkTheme(it) }
+                ToggleRow("Dark Theme", settings.darkTheme) { settings.updateDarkTheme(it) }
             }
             item {
-                ToggleRow("Dynamic Color", settings.dynamicColor) { settings.setDynamicColor(it) }
+                ToggleRow("Dynamic Color", settings.dynamicColor) { settings.updateDynamicColor(it) }
             }
             item {
-                DropdownRow("Language", settings.language, listOf("System", "English", "Uzbek", "Russian", "Chinese")) { settings.setLanguage(it) }
+                DropdownRow("Language", settings.language, listOf("System", "English", "Uzbek", "Russian", "Chinese")) { settings.updateLanguage(it) }
             }
 
             // ── View ──
             item { SectionHeader("View") }
             item {
-                ToggleRow("Show Page Numbers", settings.showPageNumbers) { settings.setShowPageNumbers(it) }
+                ToggleRow("Show Page Numbers", settings.showPageNumbers) { settings.updateShowPageNumbers(it) }
             }
             item {
-                DropdownRow("Default Zoom", settings.defaultZoomMode, listOf("Fit Width", "Fit Page", "100%", "200%")) { settings.setDefaultZoomMode(it) }
+                DropdownRow("Default Zoom", settings.defaultZoomMode, listOf("Fit Width", "Fit Page", "100%", "200%")) { settings.updateDefaultZoomMode(it) }
             }
             item {
-                ToggleRow("Smooth Scrolling", settings.smoothScrolling) { settings.setSmoothScrolling(it) }
+                ToggleRow("Smooth Scrolling", settings.smoothScrolling) { settings.updateSmoothScrolling(it) }
             }
             item {
-                ToggleRow("Snap to Page", settings.snapToPage) { settings.setSnapToPage(it) }
+                ToggleRow("Snap to Page", settings.snapToPage) { settings.updateSnapToPage(it) }
             }
 
             // ── Editing ──
             item { SectionHeader("Editing") }
             item {
-                ToggleRow("Annotation Toolbar", settings.annotationToolbar) { settings.setAnnotationToolbar(it) }
+                ToggleRow("Annotation Toolbar", settings.annotationToolbar) { settings.updateAnnotationToolbar(it) }
             }
             item {
-                ToggleRow("Auto-save", settings.autoSave) { settings.setAutoSave(it) }
+                ToggleRow("Auto-save", settings.autoSave) { settings.updateAutoSave(it) }
             }
             item {
                 if (settings.autoSave) {
-                    SliderRow("Auto-save interval", settings.autoSaveInterval, 5..300, "${settings.autoSaveInterval}s") { settings.setAutoSaveInterval(it) }
+                    SliderRow("Auto-save interval", settings.autoSaveInterval, 5..300, "${settings.autoSaveInterval}s") { settings.updateAutoSaveInterval(it) }
                 }
             }
 
             // ── Performance ──
             item { SectionHeader("Performance") }
             item {
-                ToggleRow("Hardware Acceleration", settings.hardwareAccel) { settings.setHardwareAccel(it) }
+                ToggleRow("Hardware Acceleration", settings.hardwareAccel) { settings.updateHardwareAccel(it) }
             }
             item {
-                SliderRow("Render cache size", settings.cacheSizeMb, 64..1024, "${settings.cacheSizeMb} MB") { settings.setCacheSizeMb(it) }
+                SliderRow("Render cache size", settings.cacheSizeMb, 64..1024, "${settings.cacheSizeMb} MB") { settings.updateCacheSizeMb(it) }
             }
 
             // ── Files ──
             item { SectionHeader("Files") }
             item {
-                SliderRow("Max recent files", settings.maxRecentFiles, 5..50, "${settings.maxRecentFiles}") { settings.setMaxRecentFiles(it) }
+                SliderRow("Max recent files", settings.maxRecentFiles, 5..50, "${settings.maxRecentFiles}") { settings.updateMaxRecentFiles(it) }
             }
             item {
-                DirectoryRow("Default save directory", settings.defaultSaveDir) { settings.setDefaultSaveDir(it) }
+                DirectoryRow("Default save directory", settings.defaultSaveDir) { settings.updateDefaultSaveDir(it) }
             }
 
             // ── Shortcuts ──
@@ -230,6 +229,3 @@ private fun DirectoryRow(
         singleLine = true
     )
 }
-
-/** LazyColumn alias — we use LazyColumn for the settings list. */
-private typealias LazyColumn = androidx.compose.foundation.lazy.LazyColumn

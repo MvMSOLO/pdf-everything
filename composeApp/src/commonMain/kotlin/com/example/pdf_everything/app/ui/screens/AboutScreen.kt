@@ -17,6 +17,7 @@ import com.example.pdf_everything.ui.design_system.Spacing
  * About screen per spec §44 — shows version, build info, licenses, diagnostics.
  * All data is real — no fake/stub text (§0).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(
     router: AppRouter,

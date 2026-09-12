@@ -5,8 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.os.StatFs
-import android.provider.OpenableColumns
-import android.webkit.MimeTypeMap
 import com.example.pdf_everything.core.document.DocumentSource
 
 /**
@@ -28,11 +26,6 @@ actual class PlatformService actual constructor() {
         title: String,
         allowedExtensions: List<String>
     ): DocumentSource? {
-        // On Android we use Intent-based file picking; the result comes
-        // back via onActivityResult, so this returns null here and the
-        // actual URI is handled in the Activity layer.
-        // A suspend-based wrapper is available through the Activity coroutine.
-        // For now this is the hook; the real launch is in the Activity.
         return null
     }
 
@@ -41,14 +34,9 @@ actual class PlatformService actual constructor() {
         defaultName: String,
         allowedExtensions: List<String>
     ): String? {
-        // Same: the Activity handles the ACTION_CREATE_DOCUMENT intent.
         return null
     }
 
-    /**
-     * Launch a SAF open-file intent. Call from the Activity.
-     * Returns the request code for onActivityResult.
-     */
     fun launchOpenIntent(requestCode: Int = REQUEST_OPEN_PDF): Boolean {
         val ctx = context ?: return false
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -56,7 +44,6 @@ actual class PlatformService actual constructor() {
             type = "application/pdf"
             putExtra(Intent.EXTRA_TITLE, "Open PDF")
         }
-        // Must be launched from an Activity – this is a convenience method
         if (ctx is android.app.Activity) {
             ctx.startActivityForResult(intent, requestCode)
             return true
@@ -64,9 +51,6 @@ actual class PlatformService actual constructor() {
         return false
     }
 
-    /**
-     * Launch a SAF save-file intent.
-     */
     fun launchSaveIntent(defaultName: String = "document.pdf", requestCode: Int = REQUEST_SAVE_PDF): Boolean {
         val ctx = context ?: return false
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -83,14 +67,14 @@ actual class PlatformService actual constructor() {
 
     actual suspend fun launchExternal(source: DocumentSource): Boolean {
         val ctx = context ?: return false
-        val uri = when (source) {
-            is DocumentSource.ContentUri -> source.uri
+        val parsedUri = when (source) {
+            is DocumentSource.ContentUri -> Uri.parse(source.uri)
             is DocumentSource.FilePath -> Uri.parse("file://${source.path}")
-            is DocumentSource.ByteArraySource -> return false // can't launch raw bytes
+            is DocumentSource.ByteArraySource -> return false
         }
-        val viewIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            setDataAndType(uri, "application/pdf")
+            setDataAndType(parsedUri, "application/pdf")
         }
         return try {
             ctx.startActivity(Intent.createChooser(viewIntent, "Open PDF with"))
@@ -107,7 +91,7 @@ actual class PlatformService actual constructor() {
 
     actual fun totalStorageBytes(path: String): Long {
         val stat = StatFs(Environment.getDataDirectory().path)
-        return stat.totalBlocksLong * stat.blockSizeLong
+        return stat.blockCountLong * stat.blockSizeLong
     }
 
     actual fun registerFileAssociation() {

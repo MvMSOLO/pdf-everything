@@ -130,10 +130,10 @@ private fun handleDesktopShortcut(
     if (keyEvent.type != KeyEventType.KeyDown) return false
 
     val modifiers = buildList {
-        if (keyEvent.isCtrlOn) add(KeyModifier.Ctrl)
-        if (keyEvent.isAltOn) add(KeyModifier.Alt)
-        if (keyEvent.isMetaOn) add(KeyModifier.Meta)
-        if (keyEvent.isShiftOn) add(KeyModifier.Shift)
+        if (keyEvent.isCtrlPressed) add(KeyModifier.Ctrl)
+        if (keyEvent.isAltPressed) add(KeyModifier.Alt)
+        if (keyEvent.isMetaPressed) add(KeyModifier.Meta)
+        if (keyEvent.isShiftPressed) add(KeyModifier.Shift)
     }
 
     val binding = shortcutRegistry.resolve(keyEvent.key, modifiers)
@@ -160,10 +160,11 @@ private fun handleDesktopShortcut(
             }
             ShortcutAction.PRINT -> {
                 appState.currentDocument?.let { doc ->
-                    val printService = com.example.pdf_everything.core.services.DesktopPrintService(
-                        appState.pdfEngine
-                    )
-                    printService.print(doc)
+                    val adapter = appState.pdfEngine as? com.example.pdf_everything.core.services.PdfBoxAdapter
+                    if (adapter != null) {
+                        val printService = com.example.pdf_everything.core.services.DesktopPrintService(adapter)
+                        printService.print(doc)
+                    }
                 }
             }
             ShortcutAction.CLOSE_TAB -> appState.closeActiveTab()

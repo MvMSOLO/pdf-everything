@@ -4,10 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.onKeyEvent
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,7 +71,6 @@ fun TabBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Dirty indicator
                     if (tab.isDirty) {
                         Text(
                             text = "●",
@@ -89,7 +86,6 @@ fun TabBar(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
-                    // Close button
                     IconButton(
                         onClick = { appState.closeTab(index) },
                         modifier = Modifier.size(16.dp)
@@ -122,7 +118,7 @@ fun shortcutKeyEventHandler(
         val isCtrl = event.isCtrlPressed
         val isAlt = event.isAltPressed
         val isShift = event.isShiftPressed
-        val keyName = event.key.name
+        val keyName = event.key.toString()
 
         val action = registry.resolve(isCtrl, isAlt, isShift, keyName)
         if (action != null) {

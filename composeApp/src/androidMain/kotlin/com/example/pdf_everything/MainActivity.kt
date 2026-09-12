@@ -9,25 +9,70 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.pdf_everything.app.App
+import com.example.pdf_everything.core.commands.CommandDispatcher
 import com.example.pdf_everything.core.document.DocumentSource
+import com.example.pdf_everything.core.files.DocumentFileService
+import com.example.pdf_everything.core.history.HistoryManager
+import com.example.pdf_everything.core.recovery.FileSystemProvider
+import com.example.pdf_everything.core.recovery.RecoveryService
+import com.example.pdf_everything.core.services.AppState
 import com.example.pdf_everything.core.services.PlatformService
-import kotlinx.coroutines.DelicateCoroutinesApi
+import com.example.pdf_everything.core.services.createPdfEngine
+import com.example.pdf_everything.core.settings.AndroidSettings
+import com.example.pdf_everything.core.settings.SettingsRepository
+import com.example.pdf_everything.core.shortcuts.ShortcutRegistry
+import java.io.File
 
-/**
- * Main Android Activity.
- *
- * Per spec §33‑§35:
- *   - Handles incoming VIEW/SEND intents for PDF files
- *   - Registers SAF file-pick result launchers
- *   - Passes content URIs and byte arrays to the document layer
- */
 class MainActivity : ComponentActivity() {
 
-    private val platformService = PlatformService().apply {
-        context = this@MainActivity
+    private val platformService by lazy {
+        PlatformService().apply {
+            context = this@MainActivity
+        }
     }
 
-    // SAF open-file launcher
+    private val pdfEngine by lazy { createPdfEngine() }
+    private val historyManager by lazy { HistoryManager() }
+    private val commandDispatcher by lazy { CommandDispatcher(historyManager) }
+    private val settingsRepository by lazy { SettingsRepository(AndroidSettings(applicationContext)) }
+
+    private val fileSystemProvider by lazy {
+        object : FileSystemProvider {
+            private val dir = File(applicationContext.filesDir, "recovery")
+            override fun writeText(fileName: String, text: String) {
+                dir.mkdirs()
+                File(dir, fileName).writeText(text)
+            }
+            override fun readText(fileName: String): String? {
+                val file = File(dir, fileName)
+                return if (file.exists()) file.readText() else null
+            }
+            override fun delete(fileName: String) {
+                File(dir, fileName).delete()
+            }
+        }
+    }
+
+    private val recoveryService by lazy {
+        RecoveryService(engine = pdfEngine, fileSystemProvider = fileSystemProvider)
+    }
+
+    private val documentFileService by lazy {
+        DocumentFileService(engine = pdfEngine, platform = platformService)
+    }
+
+    private val appState by lazy {
+        AppState(
+            pdfEngine = pdfEngine,
+            commandDispatcher = commandDispatcher,
+            historyManager = historyManager,
+            documentFileService = documentFileService,
+            recoveryService = recoveryService,
+            shortcutRegistry = ShortcutRegistry.createDefault(),
+            settingsRepository = settingsRepository
+        )
+    }
+
     private val openPdfLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK) {
@@ -37,33 +82,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    // SAF save-file launcher
-    private val savePdfLauncher: ActivityResultLauncher<Intent> =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == RESULT_OK) {
-                result.data?.data?.let { uri ->
-                    handleSaveUri(uri)
-                }
-            }
-        }
-
-    // Incoming intent from external app (VIEW / SEND)
     private var pendingIntentSource: DocumentSource? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // Check if we were launched with a PDF intent
         handleIncomingIntent(intent)
 
         setContent {
-            App(
-                platformService = platformService,
-                onOpenFileRequest = {
-                    launchFilePicker()
-                }
-            )
+            App(appState = appState)
         }
     }
 
@@ -71,8 +98,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handleIncomingIntent(intent)
     }
-
-    // ── Intent handling ─────────────────────────────────────────────────
 
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
@@ -95,56 +120,15 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            Intent.ACTION_SEND_MULTIPLE -> {
-                // Handle multiple PDFs — open the first for now
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.firstOrNull()?.let { uri ->
-                    pendingIntentSource = DocumentSource.ContentUri(
-                        uri = uri.toString(),
-                        displayName = getDisplayName(uri) ?: "shared.pdf"
-                    )
-                }
-            }
         }
     }
-
-    // ── File picker ──────────────────────────────────────────────────────
-
-    private fun launchFilePicker() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_TITLE, "Open PDF")
-        }
-        openPdfLauncher.launch(intent)
-    }
-
-    private fun launchSavePicker(defaultName: String = "document.pdf") {
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_TITLE, defaultName)
-        }
-        savePdfLauncher.launch(intent)
-    }
-
-    // ── URI result handlers ──────────────────────────────────────────────
 
     private fun handleOpenedUri(uri: Uri) {
-        val source = DocumentSource.ContentUri(
+        pendingIntentSource = DocumentSource.ContentUri(
             uri = uri.toString(),
             displayName = getDisplayName(uri) ?: "document.pdf"
         )
-        // TODO: feed to DocumentFileService.openDocument(source)
-        // For now, store for the App layer to pick up
-        pendingIntentSource = source
     }
-
-    private fun handleSaveUri(uri: Uri) {
-        // TODO: write document bytes to the content URI
-    }
-
-    // ── Utility ─────────────────────────────────────────────────────────
 
     private fun getDisplayName(uri: Uri): String? {
         return try {
@@ -157,14 +141,5 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) {
             uri.lastPathSegment
         }
-    }
-
-    /**
-     * Retrieve and consume the pending intent source (called by App layer).
-     */
-    fun consumePendingIntentSource(): DocumentSource? {
-        val source = pendingIntentSource
-        pendingIntentSource = null
-        return source
     }
 }

@@ -30,7 +30,7 @@ data class PasswordDialogTarget(
  *
  * Per spec: single AppBar at the App level that is VISIBLE on Home/Settings/About
  * but HIDDEN on Viewer/Editor/FormFill routes (which have their own bars inside
- * ViewerScreen / EditorScreen).
+ * ViewerScreen / EditorScreen / FormFillScreen).
  *
  * Undo/Redo wired to [AppState.commandDispatcher].
  * Password dialog wired for encrypted PDFs (spec §27).
@@ -86,11 +86,6 @@ fun App(appState: AppState) {
                 errorMessage = target.errorMessage,
                 isUnsupportedEncryption = target.isUnsupportedEncryption,
                 onPasswordSubmit = { pwd ->
-                    // Retry opening with the provided password
-                    // The caller (HomeScreen open flow) should handle the
-                    // engine.open(source, pwd) result and either:
-                    //   - succeed → navigate to viewer, clear dialog
-                    //   - fail INVALID_PASSWORD → update errorMessage
                     passwordDialogTarget = null
                 },
                 onDismiss = {
@@ -117,21 +112,16 @@ fun App(appState: AppState) {
                 )
             }
             is AppRoute.Editor -> {
-                // Phase 2 placeholder — show ViewerScreen in editor mode
-                ViewerScreen(
-                    document = appState.currentDocument,
-                    pdfEngine = appState.pdfEngine,
-                    onBack = { router.popBackStack() },
-                    onEdit = { docId -> router.navigate(AppRoute.Editor(documentId = docId)) },
+                EditorScreen(
+                    appState = appState,
+                    router = router,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
             is AppRoute.FormFill -> {
-                // FormFill routes to ViewerScreen with form-fill mode enabled
-                ViewerScreen(
-                    document = appState.currentDocument,
-                    pdfEngine = appState.pdfEngine,
-                    onBack = { router.popBackStack() },
+                FormFillScreen(
+                    appState = appState,
+                    router = router,
                     modifier = Modifier.padding(innerPadding)
                 )
             }

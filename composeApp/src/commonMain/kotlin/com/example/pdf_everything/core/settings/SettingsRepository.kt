@@ -8,12 +8,11 @@ import androidx.compose.runtime.setValue
  * Cross-platform settings persistence per spec §44.
  *
  * Uses [MultiplatformSettings] as the underlying storage backend:
- *   - Android: DataStore (via multiplatform-settings-datastore)
- *   - Desktop: Java Preferences (via multiplatform-settings-jvm)
+ *   - Android: DataStore
+ *   - Desktop: Java Preferences
  *
  * All properties are observable (Compose mutableStateOf) so the UI
- * reacts to changes automatically.  Every setter also persists the
- * value to disk immediately.
+ * reacts to changes automatically.
  */
 class SettingsRepository(
     private val delegate: MultiplatformSettings
@@ -23,7 +22,7 @@ class SettingsRepository(
     var darkTheme by mutableStateOf(delegate.getBoolean(KEY_DARK_THEME, false))
         private set
 
-    fun setDarkTheme(value: Boolean) {
+    fun updateDarkTheme(value: Boolean) {
         darkTheme = value
         delegate.putBoolean(KEY_DARK_THEME, value)
     }
@@ -31,7 +30,7 @@ class SettingsRepository(
     var dynamicColor by mutableStateOf(delegate.getBoolean(KEY_DYNAMIC_COLOR, true))
         private set
 
-    fun setDynamicColor(value: Boolean) {
+    fun updateDynamicColor(value: Boolean) {
         dynamicColor = value
         delegate.putBoolean(KEY_DYNAMIC_COLOR, value)
     }
@@ -39,7 +38,7 @@ class SettingsRepository(
     var language by mutableStateOf(delegate.getString(KEY_LANGUAGE, "System"))
         private set
 
-    fun setLanguage(value: String) {
+    fun updateLanguage(value: String) {
         language = value
         delegate.putString(KEY_LANGUAGE, value)
     }
@@ -49,7 +48,7 @@ class SettingsRepository(
     var showPageNumbers by mutableStateOf(delegate.getBoolean(KEY_SHOW_PAGE_NUMBERS, true))
         private set
 
-    fun setShowPageNumbers(value: Boolean) {
+    fun updateShowPageNumbers(value: Boolean) {
         showPageNumbers = value
         delegate.putBoolean(KEY_SHOW_PAGE_NUMBERS, value)
     }
@@ -57,7 +56,7 @@ class SettingsRepository(
     var defaultZoomMode by mutableStateOf(delegate.getString(KEY_DEFAULT_ZOOM, "Fit Width"))
         private set
 
-    fun setDefaultZoomMode(value: String) {
+    fun updateDefaultZoomMode(value: String) {
         defaultZoomMode = value
         delegate.putString(KEY_DEFAULT_ZOOM, value)
     }
@@ -65,7 +64,7 @@ class SettingsRepository(
     var smoothScrolling by mutableStateOf(delegate.getBoolean(KEY_SMOOTH_SCROLL, true))
         private set
 
-    fun setSmoothScrolling(value: Boolean) {
+    fun updateSmoothScrolling(value: Boolean) {
         smoothScrolling = value
         delegate.putBoolean(KEY_SMOOTH_SCROLL, value)
     }
@@ -73,7 +72,7 @@ class SettingsRepository(
     var snapToPage by mutableStateOf(delegate.getBoolean(KEY_SNAP_TO_PAGE, false))
         private set
 
-    fun setSnapToPage(value: Boolean) {
+    fun updateSnapToPage(value: Boolean) {
         snapToPage = value
         delegate.putBoolean(KEY_SNAP_TO_PAGE, value)
     }
@@ -83,7 +82,7 @@ class SettingsRepository(
     var annotationToolbar by mutableStateOf(delegate.getBoolean(KEY_ANNOT_TOOLBAR, true))
         private set
 
-    fun setAnnotationToolbar(value: Boolean) {
+    fun updateAnnotationToolbar(value: Boolean) {
         annotationToolbar = value
         delegate.putBoolean(KEY_ANNOT_TOOLBAR, value)
     }
@@ -91,7 +90,7 @@ class SettingsRepository(
     var autoSave by mutableStateOf(delegate.getBoolean(KEY_AUTO_SAVE, true))
         private set
 
-    fun setAutoSave(value: Boolean) {
+    fun updateAutoSave(value: Boolean) {
         autoSave = value
         delegate.putBoolean(KEY_AUTO_SAVE, value)
     }
@@ -99,7 +98,7 @@ class SettingsRepository(
     var autoSaveInterval by mutableStateOf(delegate.getInt(KEY_AUTO_SAVE_INTERVAL, 30))
         private set
 
-    fun setAutoSaveInterval(value: Int) {
+    fun updateAutoSaveInterval(value: Int) {
         autoSaveInterval = value
         delegate.putInt(KEY_AUTO_SAVE_INTERVAL, value)
     }
@@ -109,7 +108,7 @@ class SettingsRepository(
     var hardwareAccel by mutableStateOf(delegate.getBoolean(KEY_HW_ACCEL, true))
         private set
 
-    fun setHardwareAccel(value: Boolean) {
+    fun updateHardwareAccel(value: Boolean) {
         hardwareAccel = value
         delegate.putBoolean(KEY_HW_ACCEL, value)
     }
@@ -117,7 +116,7 @@ class SettingsRepository(
     var cacheSizeMb by mutableStateOf(delegate.getInt(KEY_CACHE_SIZE, 256))
         private set
 
-    fun setCacheSizeMb(value: Int) {
+    fun updateCacheSizeMb(value: Int) {
         cacheSizeMb = value
         delegate.putInt(KEY_CACHE_SIZE, value)
     }
@@ -127,7 +126,7 @@ class SettingsRepository(
     var maxRecentFiles by mutableStateOf(delegate.getInt(KEY_MAX_RECENT, 20))
         private set
 
-    fun setMaxRecentFiles(value: Int) {
+    fun updateMaxRecentFiles(value: Int) {
         maxRecentFiles = value
         delegate.putInt(KEY_MAX_RECENT, value)
     }
@@ -135,7 +134,7 @@ class SettingsRepository(
     var defaultSaveDir by mutableStateOf(delegate.getString(KEY_DEFAULT_SAVE_DIR, "Documents/PDF Everything"))
         private set
 
-    fun setDefaultSaveDir(value: String) {
+    fun updateDefaultSaveDir(value: String) {
         defaultSaveDir = value
         delegate.putString(KEY_DEFAULT_SAVE_DIR, value)
     }
