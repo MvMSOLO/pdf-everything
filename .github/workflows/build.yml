@@ -1,4 +1,4 @@
-name: Build applications
+name: PDF Everything CI
 
 on:
   push:
@@ -9,11 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  windows-release:
     runs-on: windows-latest
-
     steps:
-      - name: Check out source
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -27,24 +26,33 @@ jobs:
 
       - name: Install Android SDK packages
         shell: pwsh
-        run: sdkmanager "platforms;android-37" "build-tools;35.0.0"
+        run: |
+          sdkmanager "platforms;android-37" "build-tools;36.0.0" "platform-tools"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APK and Windows EXE
-        run: .\build_all.bat
+      - name: Run release pipeline
+        shell: cmd
+        run: build_all.bat
 
-      - name: Upload APK
+      - name: Upload Android release APK
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-everything-apk
-          path: composeApp/build/outputs/apk/debug/*.apk
+          name: pdf-everything-android-release
+          path: composeApp/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Upload Windows EXE
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-everything-windows
+          name: pdf-everything-windows-exe
           path: composeApp/build/compose/binaries/main/app/**/*.exe
+          if-no-files-found: error
+
+      - name: Upload Windows MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-everything-windows-msi
+          path: composeApp/build/compose/binaries/main/msi/*.msi
           if-no-files-found: error

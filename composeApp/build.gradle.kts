@@ -6,14 +6,13 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrainsCompose)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
 }
 
 kotlin {
     androidTarget {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_17)
         }
     }
     
@@ -62,11 +61,13 @@ kotlin {
                 implementation(libs.accompanist.permissions)
                 
                 implementation(libs.kotlinx.coroutines.android)
+                implementation("com.tom-roush:pdfbox-android:2.0.27.0")
             }
         }
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
+                implementation("org.apache.pdfbox:pdfbox:${libs.versions.pdfbox.get()}")
             }
         }
     }
@@ -80,8 +81,8 @@ android {
         applicationId = "com.example.pdf_everything"
         minSdk = 28
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
     packaging {
         resources {
@@ -94,8 +95,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
@@ -103,14 +104,19 @@ compose.desktop {
     application {
         mainClass = "MainKt"
         nativeDistributions {
-            targetFormats(TargetFormat.Exe)
+            targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "pdf-everything"
-            packageVersion = "1.0.0"
+            packageVersion = "1.0.1"
+            description = "Document-first PDF editor and viewer"
+            vendor = "PDF Everything"
+            fileAssociation(
+                mimeType = "application/pdf",
+                extension = "pdf",
+                description = "Portable Document Format"
+            )
         }
     }
 }
 
 dependencies {
-    "ksp"(libs.androidx.room.compiler)
-    "ksp"(libs.moshi.kotlin.codegen)
-}
+        }

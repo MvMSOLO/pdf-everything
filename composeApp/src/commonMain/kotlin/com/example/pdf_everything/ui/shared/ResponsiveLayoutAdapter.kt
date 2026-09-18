@@ -8,9 +8,6 @@ fun ResponsiveLayoutAdapter(
     mobileLayout: @Composable () -> Unit,
     desktopLayout: @Composable () -> Unit
 ) {
-    // Basic implementation for now, can be refined with WindowSizeClass
-    // For now we use the platform detection
-    
     if (isDesktop) {
         desktopLayout()
     } else {
