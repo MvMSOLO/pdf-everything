@@ -1,16 +1,24 @@
-name: PDF Everything CI
+name: PDF Everything Release
 
 on:
   push:
+    branches: ["main"]
   pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: pdf-everything-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-release:
     runs-on: windows-latest
+    timeout-minutes: 45
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,12 +27,14 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
 
-      - name: Install Android SDK packages
+      - name: Install Android build packages
         shell: pwsh
         run: |
           sdkmanager "platforms;android-37" "build-tools;36.0.0" "platform-tools"
@@ -32,9 +42,73 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run release pipeline
-        shell: cmd
-        run: build_all.bat
+      - name: Static quality gates
+        shell: pwsh
+        run: |
+          $matches = Select-String -Path "composeApp/src/**/*.kt" -Pattern "NotImplementedError|TODO\(|FIXME\(" -ErrorAction SilentlyContinue
+          if ($matches) {
+            $matches | ForEach-Object { Write-Host $_.Line }
+            throw "Placeholder/TODO markers remain in production Kotlin source."
+          }
+
+          $androidPlatform = Get-Content "composeApp/src/androidMain/kotlin/com/example/pdf_everything/Platform.kt" -Raw
+          if ($androidPlatform -match 'actual fun requestSaveAs\([^)]*\)\s*=\s*Unit') {
+            throw "Android Save As is still a no-op."
+          }
+
+          $workflow = Get-Content ".github/workflows/build.yml" -Raw
+          if ($workflow -match 'setup-android@v3' -or $workflow -match 'sdkmanager\s+tools(?:\s|$)') {
+            throw "Workflow still requests the deprecated Android tools package."
+          }
+
+      - name: Run all tests
+        shell: pwsh
+        run: .\gradlew.bat --no-daemon :composeApp:allTests --stacktrace
+
+      - name: Build installable Android debug APK
+        shell: pwsh
+        run: .\gradlew.bat --no-daemon :composeApp:assembleDebug --stacktrace
+
+      - name: Build Android release APK
+        shell: pwsh
+        run: .\gradlew.bat --no-daemon :composeApp:assembleRelease --stacktrace
+
+      - name: Build Windows EXE and MSI
+        shell: pwsh
+        run: .\gradlew.bat --no-daemon :composeApp:packageExe :composeApp:packageMsi --stacktrace
+
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          $debugApk = Get-ChildItem "composeApp/build/outputs/apk/debug/*.apk" | Select-Object -First 1
+          $releaseApk = Get-ChildItem "composeApp/build/outputs/apk/release/*.apk" | Select-Object -First 1
+          $exe = Get-ChildItem "composeApp/build/compose/binaries/main/app/**/*.exe" | Select-Object -First 1
+          $msi = Get-ChildItem "composeApp/build/compose/binaries/main/msi/*.msi" | Select-Object -First 1
+
+          if (-not $debugApk) { throw "Installable debug APK was not generated." }
+          if (-not $releaseApk) { throw "Release APK was not generated." }
+          if (-not $exe) { throw "Windows EXE was not generated." }
+          if (-not $msi) { throw "Windows MSI was not generated." }
+
+          foreach ($file in @($debugApk, $releaseApk, $exe, $msi)) {
+            if ($file.Length -le 0) { throw "Empty artifact: $($file.FullName)" }
+            Write-Host "$($file.FullName) $($file.Length) bytes"
+            (Get-FileHash $file.FullName -Algorithm SHA256).Hash | Write-Host
+          }
+
+          $applicationId = & apkanalyzer manifest application-id $debugApk.FullName
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($applicationId)) {
+            throw "APK manifest could not be inspected."
+          }
+          Write-Host "Debug APK applicationId: $applicationId"
+
+      - name: Upload installable Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-everything-android-debug
+          path: composeApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload Android release APK
         uses: actions/upload-artifact@v4
@@ -42,6 +116,7 @@ jobs:
           name: pdf-everything-android-release
           path: composeApp/build/outputs/apk/release/*.apk
           if-no-files-found: error
+          retention-days: 14
 
       - name: Upload Windows EXE
         uses: actions/upload-artifact@v4
@@ -49,6 +124,7 @@ jobs:
           name: pdf-everything-windows-exe
           path: composeApp/build/compose/binaries/main/app/**/*.exe
           if-no-files-found: error
+          retention-days: 14
 
       - name: Upload Windows MSI
         uses: actions/upload-artifact@v4
@@ -56,3 +132,4 @@ jobs:
           name: pdf-everything-windows-msi
           path: composeApp/build/compose/binaries/main/msi/*.msi
           if-no-files-found: error
+          retention-days: 14
