@@ -161,8 +161,13 @@ actual fun installDesktopFileDrop(onSelected: (DocumentSource) -> Unit) {
         repeat(20) {
             try {
                 val window = findAppWindow() ?: run { Thread.sleep(250); return@repeat }
-                if (window.dropTarget == null || window.dropTarget !is PdfDropTarget) {
-                    window.dropTarget = PdfDropTarget(onSelected)
+                if (window.dropTarget == null) {
+                    window.dropTarget = DropTarget(
+                        window,
+                        DnDConstants.ACTION_COPY,
+                        PdfDropTargetListener(onSelected),
+                        true
+                    )
                 }
                 return@Thread
             } catch (_: Throwable) {
@@ -175,14 +180,16 @@ actual fun installDesktopFileDrop(onSelected: (DocumentSource) -> Unit) {
 private fun findAppWindow(): Window? = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusedWindow
     ?: Window.getWindows().firstOrNull { it.isDisplayable && it.isShowing && it.name != "" }
 
-private class PdfDropTarget(private val onSelected: (DocumentSource) -> Unit) : DropTargetAdapter() {
+private class PdfDropTargetListener(private val onSelected: (DocumentSource) -> Unit) : DropTargetAdapter() {
     override fun drop(event: DropTargetDropEvent) {
         try {
             if (!event.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
-                event.rejectDrop(); return
+                event.rejectDrop()
+                return
             }
             event.acceptDrop(DnDConstants.ACTION_COPY)
-            val files = event.transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<*> ?: emptyList<Any>()
+            val files = event.transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<*>
+                ?: emptyList<Any>()
             files.filterIsInstance<File>()
                 .firstOrNull { it.isFile && it.name.endsWith(".pdf", ignoreCase = true) }
                 ?.let { onSelected(DocumentSource.FilePath(it.absolutePath)) }
@@ -191,35 +198,4 @@ private class PdfDropTarget(private val onSelected: (DocumentSource) -> Unit) : 
             runCatching { event.dropComplete(false) }
         }
     }
-}
-
-actual fun loadRecentFiles(): List<RecentFile> = RecentFileStorage.load()
-actual fun rememberRecentFile(file: RecentFile) = RecentFileStorage.remember(file)
-actual fun clearRecentFiles() = RecentFileStorage.clear()
-
-private object RecentFileStorage {
-    private val file = File(System.getProperty("user.home"), ".pdf-everything/recent.txt")
-    fun load(): List<RecentFile> = runCatching {
-        if (!file.isFile) return emptyList()
-        file.readLines().mapNotNull { line ->
-            val parts = line.split('\t')
-            if (parts.size < 3) return@mapNotNull null
-            val path = parts[1]
-            val time = parts[2].toLongOrNull() ?: 0L
-            val lastPage = parts.getOrNull(3)?.toIntOrNull() ?: 0
-            val lastZoom = parts.getOrNull(4)?.toFloatOrNull() ?: 1f
-            val fingerprint = parts.getOrNull(5)?.takeIf { it.isNotBlank() }
-            if (!File(path).isFile) null else RecentFile(parts[0], DocumentSource.FilePath(path), time, lastPage, lastZoom, fingerprint)
-        }.sortedByDescending { it.openedAtEpochMs }.take(20)
-    }.getOrDefault(emptyList())
-
-    fun remember(item: RecentFile) {
-        runCatching {
-            file.parentFile?.mkdirs()
-            val all = (listOf(item) + load()).distinctBy { (it.source as? DocumentSource.FilePath)?.path }.take(20)
-            file.writeText(all.joinToString("\n") { "${it.name.replace("\t", " ")}\t${(it.source as DocumentSource.FilePath).path.replace("\t", " ")}\t${it.openedAtEpochMs}\t${it.lastPage}\t${it.lastZoom}\t${it.fingerprint.orEmpty()}" })
-        }
-    }
-
-    fun clear() { runCatching { file.delete() } }
 }
