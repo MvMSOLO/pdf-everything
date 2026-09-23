@@ -45,9 +45,10 @@ jobs:
       - name: Static quality gates
         shell: pwsh
         run: |
-          $matches = Select-String -Path "composeApp/src/**/*.kt" -Pattern "NotImplementedError|TODO\(|FIXME\(" -ErrorAction SilentlyContinue
-          if ($matches) {
-            $matches | ForEach-Object { Write-Host $_.Line }
+          $placeholderMatches = Get-ChildItem -Path "composeApp/src" -Recurse -File -Filter "*.kt" |
+            Select-String -Pattern "NotImplementedError|TODO\(|FIXME\(" -ErrorAction SilentlyContinue
+          if ($placeholderMatches) {
+            $placeholderMatches | ForEach-Object { Write-Host $_.Path":"$_.LineNumber":"$_.Line }
             throw "Placeholder/TODO markers remain in production Kotlin source."
           }
 
