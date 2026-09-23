@@ -41,7 +41,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.consume
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.pdf_everything.RenderMemoryCache
@@ -261,9 +260,7 @@ private fun EditorPageCanvas(
                         .pointerInput(obj.id, pageIndex, scale) {
                             detectDragGestures(
                                 onDragStart = { editor.selectionModel.selectObject(pageIndex, obj.id, obj.bounds, obj.editable, obj.editable); onChanged() },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    if (editor.moveObject(pageIndex, obj.id, dragAmount.x / scale, dragAmount.y / scale)) onChanged()
+                                onDrag = { change, dragAmount ->if (editor.moveObject(pageIndex, obj.id, dragAmount.x / scale, dragAmount.y / scale)) onChanged()
                                 }
                             )
                         }
@@ -278,9 +275,7 @@ private fun EditorPageCanvas(
                         Box(
                             Modifier.align(Alignment.BottomEnd).size(14.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp))
                                 .pointerInput(obj.id, pageIndex, scale) {
-                                    detectDragGestures { change, amount ->
-                                        change.consume()
-                                        val newRight = (obj.bounds.right + amount.x / scale).coerceAtLeast(obj.bounds.left + 8f)
+                                    detectDragGestures { change, amount ->val newRight = (obj.bounds.right + amount.x / scale).coerceAtLeast(obj.bounds.left + 8f)
                                         val newBottom = (obj.bounds.bottom + amount.y / scale).coerceAtLeast(obj.bounds.top + 8f)
                                         if (editor.resizeObject(pageIndex, obj.id, obj.bounds.copy(right = newRight, bottom = newBottom))) onChanged()
                                     }
