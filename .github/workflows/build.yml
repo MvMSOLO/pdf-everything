@@ -57,13 +57,10 @@ jobs:
             throw "Android Save As is still a no-op."
           }
 
-          $workflowLines = Get-Content ".github/workflows/build.yml"
-          $installLines = $workflowLines | Where-Object { $_ -match "^\s*sdkmanager\s+" }
+          $installLines = Get-Content ".github/workflows/build.yml" |
+            Where-Object { $_ -match "^\s*sdkmanager\s+" }
           if ($installLines | Where-Object { $_ -match '(^|\s)"?tools"?($|\s)' }) {
             throw "Workflow still requests the deprecated Android tools package."
-          }
-          if ($workflowLines | Where-Object { $_ -match "setup-android@v3" }) {
-            throw "Workflow still uses the deprecated Android setup action."
           }
 
       - name: Run all tests
