@@ -116,9 +116,9 @@ actual object Phase6Platform {
                 job.jobName = document.name
                 job.copies = request.copies.coerceIn(1, 999)
                 val media = when (request.paperSize) {
-                    PrintPaperSize.A4 -> java.awt.print.Paper().apply { setSize(595.276f, 841.89f); setImageableArea(0f, 0f, 595.276, 841.89) }
-                    PrintPaperSize.LETTER -> java.awt.print.Paper().apply { setSize(612f, 792f); setImageableArea(0.0, 0.0, 612.0, 792.0) }
-                    PrintPaperSize.LEGAL -> java.awt.print.Paper().apply { setSize(612f, 1008f); setImageableArea(0.0, 0.0, 612.0, 1008.0) }
+                    PrintPaperSize.A4 -> java.awt.print.Paper().apply { setSize(595.276, 841.89); setImageableArea(0.0, 0.0, 595.276, 841.89) }
+                    PrintPaperSize.LETTER -> java.awt.print.Paper().apply { setSize(612.0, 792.0); setImageableArea(0.0, 0.0, 612.0, 792.0) }
+                    PrintPaperSize.LEGAL -> java.awt.print.Paper().apply { setSize(612.0, 1008.0); setImageableArea(0.0, 0.0, 612.0, 1008.0) }
                 }
                 val default = job.defaultPage()
                 val format = default.apply {
