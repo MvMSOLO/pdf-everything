@@ -379,6 +379,34 @@ private fun PdfWorkspace(darkReading: Boolean, onToggleReading: () -> Unit) {
         recentFiles = loadRecentFiles()
     }
 
+    fun saveToDestination(target: String) {
+        val current = document ?: return
+        scope.launch {
+            document = com.example.pdf_everything.phase6.Phase6SaveState.saving(current)
+            runCatching {
+                withContext(Dispatchers.Default) { phase6.save(current, target, incremental = false) }
+            }.onSuccess { saved ->
+                // Reopen the destination through the adapter so subsequent Ctrl+S uses the new source identity.
+                val targetSource = if (target.startsWith("content://")) DocumentSource.ContentUri(target) else DocumentSource.FilePath(target)
+                withContext(Dispatchers.Default) { engine.close(); engine.open(targetSource) }
+                document = saved.copy(source = targetSource, dirty = false, dirtyState = com.example.pdf_everything.core.document.DirtyState.CLEAN)
+                editor.setDocument(document)
+                info = engine.inspect()
+                cache.clear()
+                updateRecentForCurrent()
+                autosave.clearAfterSuccessfulSave()
+                recoveryEntries = phase6.recoverableEntries()
+                pendingSaveAs = false
+                statusMessage = "Saved As ${info?.name ?: saved.name} • validated after reopen"
+            }.onFailure { t ->
+                document = com.example.pdf_everything.phase6.Phase6SaveState.failed(current)
+                pendingSaveAs = false
+                statusMessage = "Save As failed: ${t.message ?: "Unknown error"}"
+            }
+        }
+    }
+
+
     fun saveCurrentDocument(forceConflict: Boolean = false) {
         val current = document ?: run { statusMessage = "No document is open"; return }
         if (!current.permissions.canModify) { statusMessage = "This PDF is read-only. Use Save As to create a writable copy."; return }
@@ -404,33 +432,6 @@ private fun PdfWorkspace(darkReading: Boolean, onToggleReading: () -> Unit) {
             }.onFailure { t ->
                 document = com.example.pdf_everything.phase6.Phase6SaveState.failed(current)
                 statusMessage = "Save failed: ${t.message ?: "Unknown error"}"
-            }
-        }
-    }
-
-    fun saveToDestination(target: String) {
-        val current = document ?: return
-        scope.launch {
-            document = com.example.pdf_everything.phase6.Phase6SaveState.saving(current)
-            runCatching {
-                withContext(Dispatchers.Default) { phase6.save(current, target, incremental = false) }
-            }.onSuccess { saved ->
-                // Reopen the destination through the adapter so subsequent Ctrl+S uses the new source identity.
-                val targetSource = if (target.startsWith("content://")) DocumentSource.ContentUri(target) else DocumentSource.FilePath(target)
-                withContext(Dispatchers.Default) { engine.close(); engine.open(targetSource) }
-                document = saved.copy(source = targetSource, dirty = false, dirtyState = com.example.pdf_everything.core.document.DirtyState.CLEAN)
-                editor.setDocument(document)
-                info = engine.inspect()
-                cache.clear()
-                updateRecentForCurrent()
-                autosave.clearAfterSuccessfulSave()
-                recoveryEntries = phase6.recoverableEntries()
-                pendingSaveAs = false
-                statusMessage = "Saved As ${info?.name ?: saved.name} • validated after reopen"
-            }.onFailure { t ->
-                document = com.example.pdf_everything.phase6.Phase6SaveState.failed(current)
-                pendingSaveAs = false
-                statusMessage = "Save As failed: ${t.message ?: "Unknown error"}"
             }
         }
     }
@@ -715,9 +716,8 @@ private fun PdfWorkspace(darkReading: Boolean, onToggleReading: () -> Unit) {
                     }
                 }
             }
-        }
-    )
-    } { padding ->
+        },
+        content = { padding ->
         when {
             viewMode == ViewMode.Presentation && info != null -> PresentationViewer(
                 modifier = Modifier.fillMaxSize().padding(padding),
