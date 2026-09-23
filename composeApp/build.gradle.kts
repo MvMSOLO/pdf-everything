@@ -75,12 +75,12 @@ kotlin {
 
 android {
     namespace = "com.example.pdf_everything"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.pdf_everything"
         minSdk = 28
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 2
         versionName = "1.1"
     }
