@@ -211,9 +211,9 @@ class DesktopPdfEngine : PdfEngine {
                 fileName = fileSpec.file ?: "attachment-$index",
                 description = fileSpec.cosObject.getString(org.apache.pdfbox.cos.COSName.DESC),
                 mimeType = embeddedFile.subtype,
-                sizeBytes = embeddedFile.size.takeIf { it > 0L },
+                sizeBytes = embeddedFile.size.takeIf { it > 0 }?.toLong(),
                 sourceResourceRef = fileSpec.cosObject.toString(),
-                checksum = embeddedFile.checkSum?.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                checksum = embeddedFile.checkSum
             )
         }
         return out
