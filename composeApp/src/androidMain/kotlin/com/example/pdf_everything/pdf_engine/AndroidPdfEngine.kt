@@ -27,6 +27,8 @@ import com.example.pdf_everything.pdf_engine.api.SearchOptions
 import com.example.pdf_everything.pdf_engine.api.SearchRect
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
 import com.tom_roush.pdfbox.pdmodel.PDDocumentNameDictionary
 import com.tom_roush.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification
 import com.tom_roush.pdfbox.rendering.ImageType
@@ -50,6 +52,8 @@ class AndroidPdfEngine : PdfEngine {
             com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.ANNOTATIONS,
             com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.FORMS,
             com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.OUTLINE,
+            com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.MODIFY,
+            com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.INCREMENTAL_SAVE,
             com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.WRITE,
             com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.EXPORT,
             com.example.pdf_everything.pdf_engine.api.PdfEngineCapability.VALIDATE
@@ -102,6 +106,242 @@ class AndroidPdfEngine : PdfEngine {
             check(report.valid) { "Incremental PDF failed validation: ${report.errors.joinToString()}" }
             return com.example.pdf_everything.pdf_engine.api.PdfSaveReport(target.absolutePath, target.length(), report)
         } finally { if (temp.exists()) temp.delete() }
+    }
+
+    override fun applyDocumentStructure(model: com.example.pdf_everything.core.document.Document) {
+        val pdf = document ?: error("No PDF is open")
+        val context = AndroidPdfEngineContext.applicationContext ?: error("Android context unavailable")
+        require(model.pages.isNotEmpty()) { "A PDF document must contain at least one page" }
+
+        val currentSourceIds = model.sourceDocuments
+            .filter { it.source == originalSource }
+            .map { it.id }
+            .toSet()
+        val oldPages = (0 until pdf.numberOfPages).map(pdf::getPage)
+        val usedOriginals = mutableSetOf<PDPage>()
+        val desired = mutableListOf<PDPage>()
+        val externalDocuments = mutableMapOf<String, PDDocument>()
+        val externalFiles = mutableListOf<File>()
+
+        fun externalDocument(sourceId: String): PDDocument {
+            return externalDocuments.getOrPut(sourceId) {
+                val ref = model.sourceDocuments.firstOrNull { it.id == sourceId }
+                    ?: error("Missing source mapping for " + sourceId)
+                val file = materializeSource(context, ref.source)
+                externalFiles += file
+                PDDocument.load(file)
+            }
+        }
+
+        try {
+            model.pages.forEach { pageModel ->
+                val sourceId = pageModel.sourceDocumentId
+                val sourceIsCurrent = sourceId == null || sourceId in currentSourceIds
+                val originalIndex = pageModel.sourcePageIndex
+                when {
+                    sourceIsCurrent && originalIndex != null && originalIndex in oldPages.indices -> {
+                        val original = oldPages[originalIndex]
+                        if (usedOriginals.add(original)) desired += original else desired += pdf.importPage(original)
+                    }
+                    sourceId != null && originalIndex != null -> {
+                        val sourcePdf = externalDocument(sourceId)
+                        require(originalIndex in 0 until sourcePdf.numberOfPages) {
+                            "Source page " + originalIndex + " is outside " + sourceId
+                        }
+                        desired += pdf.importPage(sourcePdf.getPage(originalIndex))
+                    }
+                    else -> {
+                        val media = pageModel.boxes.media
+                        desired += PDPage(PDRectangle(media.width.coerceAtLeast(1f), media.height.coerceAtLeast(1f)))
+                    }
+                }
+            }
+
+            pdf.pages.toList().forEach { page -> pdf.pages.remove(page) }
+            desired.forEach { page -> pdf.pages.add(page) }
+
+            model.pages.forEachIndexed { index, pageModel ->
+                val page = pdf.getPage(index)
+                page.rotation = ((pageModel.rotation % 360) + 360) % 360
+                val crop = pageModel.boxes.crop
+                if (crop.width > 0f && crop.height > 0f) {
+                    val mediaHeight = page.mediaBox.height
+                    page.cropBox = PDRectangle(
+                        crop.left,
+                        (mediaHeight - crop.bottom).coerceAtLeast(0f),
+                        crop.width,
+                        crop.height
+                    )
+                }
+            }
+
+            model.pages.forEachIndexed { index, pageModel ->
+                pageModel.objects.filter { it.editable }.forEach { obj ->
+                    when (obj) {
+                        is com.example.pdf_everything.core.document.PdfObject.TextObject,
+                        is com.example.pdf_everything.core.document.PdfObject.ImageObject,
+                        is com.example.pdf_everything.core.document.PdfObject.ShapeObject -> addObject(index, obj)
+                        else -> throw UnsupportedOperationException("Cannot serialize this editable object type on Android yet")
+                    }
+                }
+            }
+
+            model.pages.forEachIndexed { index, pageModel ->
+                val nativePage = pdf.getPage(index)
+                pageModel.annotations.forEach { annotation ->
+                    val duplicate = nativePage.annotations.any { native ->
+                        native.subtype.equals(annotation.nativeSubtype ?: annotation.type.name, ignoreCase = true) &&
+                            (native as? com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationMarkup)?.contents.orEmpty() == annotation.contents &&
+                            native.rectangle.width == annotation.bounds.width &&
+                            native.rectangle.height == annotation.bounds.height
+                    }
+                    if (!duplicate) nativePage.annotations.add(modelToAnnotation(annotation.copy(pageIndex = index), pdf))
+                }
+            }
+
+            updateMetadata(model.metadata)
+            updateOutline(model.outline)
+            model.formModel.fields.forEach { field ->
+                if (field.value.isNotEmpty() || field.selectedValues.isNotEmpty()) {
+                    runCatching { updateFormField(field.id, field.value, field.selectedValues) }
+                        .getOrElse { throw IllegalStateException("Form field " + field.id + " could not be persisted: " + it.message, it) }
+                }
+            }
+            dirty = true
+            postMutation()
+        } finally {
+            externalDocuments.values.forEach { runCatching { it.close() } }
+            externalFiles.forEach { runCatching { it.delete() } }
+        }
+    }
+
+    override fun addObject(pageIndex: Int, obj: com.example.pdf_everything.core.document.PdfObject) {
+        val pdf = document ?: error("No PDF is open")
+        require(pageIndex in 0 until pdf.numberOfPages) { "Invalid page index: $pageIndex" }
+        val page = pdf.getPage(pageIndex)
+        when (obj) {
+            is com.example.pdf_everything.core.document.PdfObject.TextObject -> {
+                val r = com.example.pdf_everything.core.document.CoordinateSystem.uiRectToPdf(obj.bounds, page.mediaBox.height)
+                com.tom_roush.pdfbox.pdmodel.PDPageContentStream(
+                    pdf, page,
+                    com.tom_roush.pdfbox.pdmodel.PDPageContentStream.AppendMode.APPEND,
+                    true, true
+                ).use { cs ->
+                    cs.beginText()
+                    cs.setFont(com.tom_roush.pdfbox.pdmodel.font.PDType1Font.HELVETICA, obj.fontSize.coerceIn(4f, 200f))
+                    cs.newLineAtOffset(r.left, r.top)
+                    cs.showText(obj.text)
+                    cs.endText()
+                }
+            }
+            is com.example.pdf_everything.core.document.PdfObject.ImageObject -> {
+                val file = resolveImageSource(obj.source)
+                val image = com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject.createFromFileByContent(file, pdf)
+                val r = com.example.pdf_everything.core.document.CoordinateSystem.uiRectToPdf(obj.bounds, page.mediaBox.height)
+                com.tom_roush.pdfbox.pdmodel.PDPageContentStream(
+                    pdf, page,
+                    com.tom_roush.pdfbox.pdmodel.PDPageContentStream.AppendMode.APPEND,
+                    true, true
+                ).use { cs ->
+                    cs.drawImage(image, r.left, r.top, r.width.coerceAtLeast(1f), r.height.coerceAtLeast(1f))
+                }
+            }
+            is com.example.pdf_everything.core.document.PdfObject.ShapeObject -> {
+                val r = com.example.pdf_everything.core.document.CoordinateSystem.uiRectToPdf(obj.bounds, page.mediaBox.height)
+                com.tom_roush.pdfbox.pdmodel.PDPageContentStream(
+                    pdf, page,
+                    com.tom_roush.pdfbox.pdmodel.PDPageContentStream.AppendMode.APPEND,
+                    true, true
+                ).use { cs ->
+                    cs.addRect(r.left, r.top, r.width, r.height)
+                    cs.stroke()
+                }
+            }
+            else -> throw UnsupportedOperationException("Android native insertion supports text, image and shape objects only")
+        }
+        dirty = true
+    }
+
+    override fun updateMetadata(metadata: com.example.pdf_everything.core.document.DocumentMetadata) {
+        val info = document?.documentInformation ?: error("No PDF is open")
+        info.title = metadata.title
+        info.author = metadata.author
+        info.subject = metadata.subject
+        info.keywords = metadata.keywords
+        info.creator = metadata.creator
+        dirty = true
+    }
+
+    override fun updateAnnotation(annotation: PdfAnnotation) {
+        val pdf = document ?: error("No PDF is open")
+        val page = pdf.getPage(annotation.pageIndex)
+        val ordinal = annotation.id.substringAfter("ann-" + annotation.pageIndex + "-", "").substringBefore('-').toIntOrNull()
+            ?: throw UnsupportedOperationException("Annotation identity is not writable: " + annotation.id)
+        require(ordinal in page.annotations.indices) { "Annotation not found: " + annotation.id }
+        page.annotations[ordinal] = modelToAnnotation(annotation, pdf)
+        dirty = true
+    }
+
+    override fun deleteAnnotation(pageIndex: Int, annotationId: String) {
+        val pdf = document ?: error("No PDF is open")
+        val page = pdf.getPage(pageIndex)
+        val ordinal = annotationId.substringAfter("ann-" + pageIndex + "-", "").substringBefore('-').toIntOrNull()
+            ?: throw UnsupportedOperationException("Annotation identity is not writable: " + annotationId)
+        require(ordinal in page.annotations.indices)
+        page.annotations.removeAt(ordinal)
+        dirty = true
+    }
+
+    override fun updateFormField(fieldId: String, value: String, selectedValues: List<String>) {
+        val form = document?.documentCatalog?.acroForm ?: throw UnsupportedOperationException("PDF has no AcroForm")
+        val qualified = fieldId.removePrefix("form-").substringBeforeLast('-', missingDelimiterValue = fieldId.removePrefix("form-"))
+        val field = form.fieldTree.firstOrNull { it.fullyQualifiedName == qualified || "form-" + it.fullyQualifiedName == fieldId }
+            ?: throw IllegalArgumentException("Form field not found: " + fieldId)
+        require(!field.isReadOnly) { "Form field is read-only: " + fieldId }
+        when (field) {
+            is com.tom_roush.pdfbox.pdmodel.interactive.form.PDCheckBox -> if (value.equals("true", true) || value == field.onValue) field.check() else field.unCheck()
+            is com.tom_roush.pdfbox.pdmodel.interactive.form.PDRadioButton -> field.value = selectedValues.firstOrNull() ?: value
+            is com.tom_roush.pdfbox.pdmodel.interactive.form.PDChoice -> if (selectedValues.size > 1) field.value = selectedValues else field.value = selectedValues.firstOrNull() ?: value
+            else -> field.value = value
+        }
+        document?.documentCatalog?.acroForm?.refreshAppearances()
+        dirty = true
+    }
+
+    override fun updateOutline(outline: List<com.example.pdf_everything.core.document.OutlineItem>) {
+        val pdf = document ?: error("No PDF is open")
+        val root = com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline()
+        pdf.documentCatalog.documentOutline = root
+        fun append(parent: com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode, items: List<com.example.pdf_everything.core.document.OutlineItem>) {
+            items.forEach { item ->
+                val node = com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem().apply {
+                    title = item.title
+                    val pageIndex = item.destination.pageIndex ?: item.pageIndex
+                    if (pageIndex != null && pageIndex in 0 until pdf.numberOfPages) {
+                        destination = com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination().apply {
+                            page = pdf.getPage(pageIndex)
+                            left = item.destination.left?.toInt() ?: 0
+                            top = item.destination.top?.toInt() ?: 0
+                            zoom = item.destination.zoom ?: 0f
+                        }
+                    }
+                }
+                parent.addLast(node)
+                append(node, item.children)
+            }
+        }
+        append(root, outline)
+        root.openNode()
+        dirty = true
+    }
+
+    private fun resolveImageSource(value: String): File {
+        val context = AndroidPdfEngineContext.applicationContext ?: error("Android context unavailable")
+        return when {
+            value.startsWith("content://") -> materializeSource(context, com.example.pdf_everything.core.document.DocumentSource.ContentUri(value))
+            value.startsWith("file://") -> File(Uri.parse(value).path ?: value.removePrefix("file://"))
+            else -> File(value)
+        }.also { require(it.isFile && it.length() > 0) { "Image source is unavailable" } }
     }
 
     override fun export(path: String): com.example.pdf_everything.pdf_engine.api.PdfSaveReport = save(path)
