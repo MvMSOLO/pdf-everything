@@ -25,7 +25,7 @@ import com.example.pdf_everything.pdf_engine.api.RenderPriority
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
-import org.jetbrains.skia.toComposeImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 
 @Composable
 fun Phase3RenderedImage(engine: PdfEngine, page: PdfPageInfo, width: Int, cache: RenderMemoryCache) {
