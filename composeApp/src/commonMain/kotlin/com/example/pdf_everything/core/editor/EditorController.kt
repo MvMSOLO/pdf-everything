@@ -138,7 +138,7 @@ class EditorController(initialDocument: Document? = null) {
         }
         external.image?.let { png ->
             val source = PlatformClipboard.materializeImage(png)
-            if (source != null) return dispatch(InsertImageCommand(pageIndex, source.toString(), defaultInsertBounds(page), newObjectId("image")))
+            if (source != null) return dispatch(InsertImageCommand(pageIndex, sourceValue(source), defaultInsertBounds(page), newObjectId("image")))
         }
         val text = external.text ?: return false
         return dispatch(InsertTextCommand(pageIndex, text, defaultInsertBounds(page), fontSize = 12f, objectId = newObjectId("text")))
@@ -262,6 +262,11 @@ class EditorController(initialDocument: Document? = null) {
     fun resetFormField(fieldId: String): Boolean = dispatch(ResetFormFieldCommand(fieldId))
 
 
+
+    private fun sourceValue(source: com.example.pdf_everything.core.document.DocumentSource): String = when (source) {
+        is com.example.pdf_everything.core.document.DocumentSource.FilePath -> source.path
+        is com.example.pdf_everything.core.document.DocumentSource.ContentUri -> source.uri
+    }
 
     private fun shiftObject(obj: PdfObject, dx: Float, dy: Float, id: String): PdfObject = copyWithId(copyWithBounds(obj, obj.bounds.copy(left = obj.bounds.left + dx, right = obj.bounds.right + dx, top = obj.bounds.top + dy, bottom = obj.bounds.bottom + dy)), id)
     private fun copyWithBounds(obj: PdfObject, bounds: RectF): PdfObject = when (obj) {
