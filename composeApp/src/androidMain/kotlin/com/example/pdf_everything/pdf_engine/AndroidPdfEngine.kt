@@ -335,6 +335,77 @@ class AndroidPdfEngine : PdfEngine {
         dirty = true
     }
 
+    private fun modelToAnnotation(
+        model: PdfAnnotation,
+        pdf: PDDocument
+    ): com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotation {
+        val pdfRect = com.example.pdf_everything.core.document.CoordinateSystem.uiRectToPdf(
+            model.bounds,
+            pdf.getPage(model.pageIndex).mediaBox.height
+        )
+        val rect = PDRectangle(pdfRect.left, pdfRect.top, pdfRect.width, pdfRect.height)
+        val annotation = when (model.type) {
+            AnnotationType.Highlight -> com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup(
+                com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT
+            ).apply {
+                rectangle = rect
+                quadPoints = floatArrayOf(
+                    pdfRect.left, pdfRect.top + pdfRect.height,
+                    pdfRect.right, pdfRect.top + pdfRect.height,
+                    pdfRect.left, pdfRect.top,
+                    pdfRect.right, pdfRect.top
+                )
+            }
+            AnnotationType.Underline -> com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup(
+                com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup.SUB_TYPE_UNDERLINE
+            ).apply {
+                rectangle = rect
+                quadPoints = floatArrayOf(
+                    pdfRect.left, pdfRect.top + pdfRect.height,
+                    pdfRect.right, pdfRect.top + pdfRect.height,
+                    pdfRect.left, pdfRect.top,
+                    pdfRect.right, pdfRect.top
+                )
+            }
+            AnnotationType.StrikeOut -> com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup(
+                com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup.SUB_TYPE_STRIKEOUT
+            ).apply {
+                rectangle = rect
+                quadPoints = floatArrayOf(
+                    pdfRect.left, pdfRect.top + pdfRect.height,
+                    pdfRect.right, pdfRect.top + pdfRect.height,
+                    pdfRect.left, pdfRect.top,
+                    pdfRect.right, pdfRect.top
+                )
+            }
+            AnnotationType.Note -> com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationText().apply {
+                rectangle = rect
+                contents = model.contents.ifEmpty { model.comment?.contents.orEmpty() }
+                titlePopup = model.author.ifEmpty { model.comment?.author.orEmpty() }
+            }
+            AnnotationType.FreeText -> com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationFreeText().apply {
+                rectangle = rect
+                contents = model.contents
+                titlePopup = model.author
+                defaultAppearance = model.style.fontSize.toString() + " Tf 0 g"
+            }
+            else -> throw UnsupportedOperationException("Android does not yet serialize " + model.type.name + " annotations")
+        }
+        if (annotation is com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationMarkup) {
+            annotation.contents = model.contents
+            annotation.titlePopup = model.author
+            annotation.subject = model.subject
+        }
+        runCatching {
+            annotation.color = com.tom_roush.pdfbox.pdmodel.graphics.color.PDColor(
+                floatArrayOf(model.style.color.red, model.style.color.green, model.style.color.blue),
+                com.tom_roush.pdfbox.pdmodel.graphics.color.PDDeviceRGB.INSTANCE
+            )
+        }
+        runCatching { annotation.constructAppearances() }
+        return annotation
+    }
+
     private fun resolveImageSource(value: String): File {
         val context = AndroidPdfEngineContext.applicationContext ?: error("Android context unavailable")
         return when {
