@@ -6,11 +6,12 @@ import com.example.pdf_everything.core.search.IndexedChar
 import com.example.pdf_everything.core.search.PageTextSearchIndex
 import com.example.pdf_everything.pdf_engine.api.*
 import org.apache.pdfbox.Loader
-import org.apache.pdfbox.contentstream.PDPageContentStream
+import org.apache.pdfbox.pdmodel.PDPageContentStream
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.common.PDRectangle
 import org.apache.pdfbox.pdmodel.font.PDType1Font
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject
 import org.apache.pdfbox.pdmodel.interactive.annotation.*
 import org.apache.pdfbox.pdmodel.interactive.form.*
@@ -170,7 +171,8 @@ class DesktopPdfEngine : PdfEngine {
     }
 
     override fun getForms(): FormModel {
-        val form = document?.documentCatalog?.acroForm ?: return FormModel()
+        val pdf = document ?: return FormModel()
+        val form = pdf.documentCatalog.acroForm ?: return FormModel()
         val out = mutableListOf<FormField>()
         form.fieldTree.forEach { field ->
             val value = runCatching { field.valueAsString }.getOrDefault("")
@@ -207,10 +209,10 @@ class DesktopPdfEngine : PdfEngine {
             out += PdfAttachment(
                 attachmentId = "attachment-$index-${fileSpec.file.hashCode()}",
                 fileName = fileSpec.file ?: "attachment-$index",
-                description = fileSpec.description,
+                description = fileSpec.cosObject.getString(org.apache.pdfbox.cos.COSName.DESC),
                 mimeType = embeddedFile.subtype,
-                sizeBytes = embeddedFile.size.takeIf { it > 0 },
-                sourceResourceRef = fileSpec.cosObject?.toString(),
+                sizeBytes = embeddedFile.size.takeIf { it > 0L },
+                sourceResourceRef = fileSpec.cosObject.toString(),
                 checksum = embeddedFile.checkSum?.joinToString("") { "%02x".format(it.toInt() and 0xff) }
             )
         }
@@ -424,8 +426,8 @@ class DesktopPdfEngine : PdfEngine {
         require(!field.isReadOnly) { "Form field is read-only: $fieldId" }
         when (field) {
             is PDCheckBox -> if (value.equals("true", true) || value == field.onValue) field.check() else field.unCheck()
-            is PDRadioButton -> field.value = selectedValues.firstOrNull() ?: value
-            is PDChoice -> if (selectedValues.size > 1) field.value = selectedValues else field.value = (selectedValues.firstOrNull() ?: value)
+            is PDRadioButton -> field.setValue(selectedValues.firstOrNull() ?: value)
+            is PDChoice -> if (selectedValues.size > 1) field.setValue(selectedValues) else field.setValue(selectedValues.firstOrNull() ?: value)
             else -> field.value = value
         }
         dirty = true
@@ -601,7 +603,7 @@ class DesktopPdfEngine : PdfEngine {
         val pdfRect = CoordinateSystem.uiRectToPdf(obj.bounds, page.mediaBox.height)
         PDPageContentStream(pdf, page, PDPageContentStream.AppendMode.APPEND, true, true).use { cs ->
             cs.beginText()
-            cs.setFont(PDType1Font.HELVETICA, obj.fontSize.coerceIn(4f, 200f))
+            cs.setFont(PDType1Font(Standard14Fonts.FontName.HELVETICA), obj.fontSize.coerceIn(4f, 200f))
             cs.newLineAtOffset(pdfRect.left, pdfRect.top)
             cs.showText(obj.text)
             cs.endText()
