@@ -243,38 +243,109 @@ class DesktopPdfEngine : PdfEngine {
     override fun applyDocumentStructure(model: Document) {
         val pdf = document ?: error("No PDF is open")
         require(model.pages.isNotEmpty()) { "A PDF document must contain at least one page" }
-        val order = model.pages.mapNotNull { it.sourcePageIndex }.distinct()
-        val nativeCount = pdf.numberOfPages
-        if (model.pages.size == nativeCount && order.size == nativeCount && order.sorted() == (0 until nativeCount).toList()) {
-            // Reorder using the real PDPage instances. This preserves their content streams, resources and annotations.
-            val original = (0 until nativeCount).map(pdf::getPage)
-            val desired = order.map { original[it] }
-            desired.forEach { pdf.pages.remove(it) }
-            desired.forEach { pdf.pages.add(it) }
-        } else if (model.pages.size != nativeCount || order.size != nativeCount) {
-            throw UnsupportedOperationException("The current native adapter can safely persist reorder-only page transactions. Insert/delete/merge pages must use the dedicated page import pipeline instead of silently dropping PDF resources.")
-        }
-        model.pages.forEachIndexed { index, pageModel ->
-            val page = pdf.getPage(index)
-            page.rotation = ((pageModel.rotation % 360) + 360) % 360
-            val crop = pageModel.boxes.crop
-            if (crop.width > 0f && crop.height > 0f) {
-                val mediaHeight = page.mediaBox.height
-                page.cropBox = PDRectangle(crop.left, (mediaHeight - crop.bottom).coerceAtLeast(0f), crop.width, crop.height)
-            }
-            // Annotations move with their native PDPage. Do not re-address them by ordinal after reorder;
-            // that would make page-object identity unstable. Annotation mutations use their owning page directly.
-        }
-        updateMetadata(model.metadata)
-        updateOutline(model.outline)
-        model.formModel.fields.forEach { field ->
-            if (field.value.isNotEmpty() || field.selectedValues.isNotEmpty()) {
-                runCatching { updateFormField(field.id, field.value, field.selectedValues) }
-                    .getOrElse { throw IllegalStateException("Form field ${field.id} could not be persisted: ${it.message}", it) }
+
+        val currentSourceIds = model.sourceDocuments
+            .filter { it.source == DocumentSource.FilePath(sourceFile?.absolutePath ?: "") }
+            .map { it.id }
+            .toSet()
+
+        val oldPages = (0 until pdf.numberOfPages).map(pdf::getPage)
+        val usedOriginals = mutableSetOf<PDPage>()
+        val desired = mutableListOf<PDPage>()
+        val externalDocuments = mutableMapOf<String, PDDocument>()
+
+        fun externalDocument(sourceId: String): PDDocument {
+            return externalDocuments.getOrPut(sourceId) {
+                val ref = model.sourceDocuments.firstOrNull { it.id == sourceId }
+                    ?: throw IllegalStateException("Missing source mapping for page source " + sourceId)
+                val source = ref.source as? DocumentSource.FilePath
+                    ?: throw UnsupportedOperationException("Desktop merge currently requires local source files")
+                Loader.loadPDF(File(source.path))
             }
         }
-        dirty = true
-        postMutation()
+
+        try {
+            model.pages.forEach { pageModel ->
+                val sourceId = pageModel.sourceDocumentId
+                val sourceIsCurrent = sourceId == null || sourceId in currentSourceIds
+                val originalIndex = pageModel.sourcePageIndex
+
+                when {
+                    sourceIsCurrent && originalIndex != null && originalIndex in oldPages.indices -> {
+                        val original = oldPages[originalIndex]
+                        if (usedOriginals.add(original)) desired += original
+                        else desired += pdf.importPage(original)
+                    }
+                    sourceId != null && originalIndex != null -> {
+                        val sourcePdf = externalDocument(sourceId)
+                        require(originalIndex in 0 until sourcePdf.numberOfPages) {
+                            "Source page " + originalIndex + " is outside " + sourceId
+                        }
+                        desired += pdf.importPage(sourcePdf.getPage(originalIndex))
+                    }
+                    else -> {
+                        val media = pageModel.boxes.media
+                        desired += PDPage(PDRectangle(media.width.coerceAtLeast(1f), media.height.coerceAtLeast(1f)))
+                    }
+                }
+            }
+
+            pdf.pages.toList().forEach { page -> pdf.pages.remove(page) }
+            desired.forEach { page -> pdf.pages.add(page) }
+
+            model.pages.forEachIndexed { index, pageModel ->
+                val page = pdf.getPage(index)
+                page.rotation = ((pageModel.rotation % 360) + 360) % 360
+                val crop = pageModel.boxes.crop
+                if (crop.width > 0f && crop.height > 0f) {
+                    val mediaHeight = page.mediaBox.height
+                    page.cropBox = PDRectangle(
+                        crop.left,
+                        (mediaHeight - crop.bottom).coerceAtLeast(0f),
+                        crop.width,
+                        crop.height
+                    )
+                }
+            }
+
+            ownedObjects.clear()
+            model.pages.forEachIndexed { index, pageModel ->
+                pageModel.objects.filter { it.editable }.forEach { obj ->
+                    when (obj) {
+                        is PdfObject.TextObject,
+                        is PdfObject.ImageObject,
+                        is PdfObject.ShapeObject -> addObject(index, obj)
+                        else -> throw UnsupportedOperationException("Cannot serialize this editable object type yet")
+                    }
+                }
+            }
+
+            model.pages.forEachIndexed { index, pageModel ->
+                val nativePage = pdf.getPage(index)
+                pageModel.annotations.forEach { annotation ->
+                    val duplicate = nativePage.annotations.any { native ->
+                        native.subtype.equals(annotation.nativeSubtype ?: annotation.type.name, ignoreCase = true) &&
+                            (native as? PDAnnotationMarkup)?.contents.orEmpty() == annotation.contents &&
+                            native.rectangle.width == annotation.bounds.width &&
+                            native.rectangle.height == annotation.bounds.height
+                    }
+                    if (!duplicate) nativePage.annotations.add(modelToAnnotation(annotation.copy(pageIndex = index), pdf))
+                }
+            }
+
+            updateMetadata(model.metadata)
+            updateOutline(model.outline)
+            model.formModel.fields.forEach { field ->
+                if (field.value.isNotEmpty() || field.selectedValues.isNotEmpty()) {
+                    runCatching { updateFormField(field.id, field.value, field.selectedValues) }
+                        .getOrElse { throw IllegalStateException("Form field " + field.id + " could not be persisted: " + it.message, it) }
+                }
+            }
+            dirty = true
+            postMutation()
+        } finally {
+            externalDocuments.values.forEach { runCatching { it.close() } }
+        }
     }
 
     override fun modify(pageIndex: Int, obj: PdfObject) = updateObject(pageIndex, obj)
