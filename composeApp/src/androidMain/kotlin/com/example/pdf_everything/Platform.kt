@@ -185,7 +185,11 @@ actual object Phase6Platform {
     private fun recoveryRoot(): File? = ActivityHolder.activity?.filesDir?.resolve("recovery")?.also(File::mkdirs)
 
     actual fun fingerprint(source: DocumentSource): SourceFingerprint? = when (source) {
-        is DocumentSource.FilePath -> null
+        is DocumentSource.FilePath -> runCatching {
+            val file = File(source.path)
+            if (!file.isFile) return@runCatching null
+            SourceFingerprint(source, ${file.length()}:${file.lastModified()}, System.currentTimeMillis())
+        }.getOrNull()
         is DocumentSource.ContentUri -> runCatching {
             val activity = ActivityHolder.activity ?: return@runCatching null
             activity.contentResolver.query(Uri.parse(source.uri), arrayOf(OpenableColumns.SIZE, android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED), null, null, null)?.use { c ->
@@ -212,21 +216,48 @@ actual object Phase6Platform {
         } finally { temp.delete() }
     }
 
-    actual fun requestSaveAs(request: SaveAsRequest, onSelected: (String?) -> Unit) = Unit
+    actual fun requestSaveAs(request: SaveAsRequest, onSelected: (String?) -> Unit) {
+        val activity = ActivityHolder.activity as? MainActivity
+        if (activity == null) {
+            onSelected(null)
+            return
+        }
+        AndroidSaveAs.callback = onSelected
+        activity.launchSaveAs(request.suggestedName)
+    }
 
     actual fun writeRecovery(entry: RecoveryEntry, payload: String): Boolean = runCatching {
         val root = recoveryRoot() ?: return@runCatching false
+        val sourceValue = when (val source = entry.source) {
+            is DocumentSource.ContentUri -> source.uri
+            is DocumentSource.FilePath -> "file://" + source.path
+            null -> ""
+        }
         File(root, "${entry.id}.json").writeText(payload)
-        File(root, "${entry.id}.meta").writeText(listOf(entry.id, entry.documentName, entry.source?.toString().orEmpty(), entry.createdAtEpochMs, entry.updatedAtEpochMs, entry.payloadPath, entry.sourceFingerprint.orEmpty()).joinToString("\n"))
+        File(root, "${entry.id}.meta").writeText(
+            listOf(entry.id, entry.documentName, sourceValue, entry.createdAtEpochMs, entry.updatedAtEpochMs, entry.payloadPath, entry.sourceFingerprint.orEmpty()).joinToString("\n")
+        )
         true
     }.getOrDefault(false)
 
     actual fun listRecoveries(): List<RecoveryEntry> = runCatching {
         recoveryRoot()?.listFiles { f -> f.extension == "meta" }.orEmpty().mapNotNull { f ->
-            val p = f.readLines(); if (p.size < 6) null else RecoveryEntry(
-                p[0], p[1], p[2].takeIf(String::isNotBlank)?.let(DocumentSource::ContentUri),
-                p[3].toLongOrNull() ?: 0L, p[4].toLongOrNull() ?: 0L, p[5], p.getOrNull(6)?.takeIf(String::isNotBlank)
-            )
+            val p = f.readLines()
+            if (p.size < 6) null else {
+                val source = p[2].takeIf(String::isNotBlank)?.let {
+                    when {
+                        it.startsWith("content://") -> DocumentSource.ContentUri(it)
+                        it.startsWith("file://") -> DocumentSource.FilePath(it.removePrefix("file://"))
+                        it.startsWith("FilePath(path=") -> DocumentSource.FilePath(it.removePrefix("FilePath(path=").removeSuffix(")"))
+                        it.startsWith("ContentUri(uri=") -> DocumentSource.ContentUri(it.removePrefix("ContentUri(uri=").removeSuffix(")"))
+                        else -> DocumentSource.ContentUri(it)
+                    }
+                }
+                RecoveryEntry(
+                    p[0], p[1], source,
+                    p[3].toLongOrNull() ?: 0L, p[4].toLongOrNull() ?: 0L, p[5], p.getOrNull(6)?.takeIf(String::isNotBlank)
+                )
+            }
         }
     }.getOrDefault(emptyList())
 
