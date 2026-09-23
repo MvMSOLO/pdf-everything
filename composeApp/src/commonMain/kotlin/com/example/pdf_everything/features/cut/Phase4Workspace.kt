@@ -250,9 +250,7 @@ private fun CropOverlay(media: RectF, rect: RectF, scale: Float, lockAspect: Boo
         Box(
             Modifier.offset((x + w / 2f - 18f).toDpSafe(), (y + h / 2f - 18f).toDpSafe()).size(36.dp)
                 .pointerInput(rect) {
-                    detectDragGestures { change, amount ->
-                        change.consume()
-                        val dx = amount.x / scale
+                    detectDragGestures { change, amount ->val dx = amount.x / scale
                         val dy = amount.y / scale
                         val nx = (rect.left + dx).coerceIn(media.left, media.right - rect.width)
                         val ny = (rect.top + dy).coerceIn(media.top, media.bottom - rect.height)
@@ -269,9 +267,7 @@ private fun CropOverlay(media: RectF, rect: RectF, scale: Float, lockAspect: Boo
                 Modifier.offset((center.x - hs.value / 2f).toDpSafe(), (center.y - hs.value / 2f).toDpSafe()).size(hs)
                     .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
                     .pointerInput(rect, handle) {
-                        detectDragGestures { change, amount ->
-                            change.consume()
-                            onChanged(clampRect(resize(handle, amount.x / scale, amount.y / scale)))
+                        detectDragGestures { change, amount ->onChanged(clampRect(resize(handle, amount.x / scale, amount.y / scale)))
                         }
                     }
             )
@@ -288,7 +284,7 @@ private fun AreaOverlay(media: RectF, rect: RectF, scale: Float, onChanged: (Rec
     Box(Modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) { drawRect(MaterialTheme.colorScheme.error.copy(alpha = 0.25f), Offset(x, y), Size(w, h)); drawRect(MaterialTheme.colorScheme.error, Offset(x, y), Size(w, h), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f)) }
         Box(Modifier.offset((x + w - 9f).toDpSafe(), (y + h - 9f).toDpSafe()).size(18.dp).background(MaterialTheme.colorScheme.error, RoundedCornerShape(5.dp)).pointerInput(rect) {
-            detectDragGestures { change, amount -> change.consume(); onChanged(rect.copy(right = (rect.right + amount.x / scale).coerceIn(rect.left + 8f, media.right), bottom = (rect.bottom + amount.y / scale).coerceIn(rect.top + 8f, media.bottom))) }
+            detectDragGestures { change, amount -> onChanged(rect.copy(right = (rect.right + amount.x / scale).coerceIn(rect.left + 8f, media.right), bottom = (rect.bottom + amount.y / scale).coerceIn(rect.top + 8f, media.bottom))) }
         })
     }
 }
@@ -512,14 +508,10 @@ private fun OrganizerPanel(document: Document, engine: PdfEngine, cache: RenderM
 private fun OrganizerCard(page: Page, active: Boolean, selected: Boolean, engine: PdfEngine, cache: RenderMemoryCache, onSelect: () -> Unit, onDragBy: (Int) -> Unit) {
     Card(Modifier.fillMaxWidth().pointerInput(page.id, isDesktop) {
         if (isDesktop) {
-            detectDragGestures { change, amount ->
-                change.consume()
-                if (kotlin.math.abs(amount.y) > 18f) onDragBy(if (amount.y > 0f) 1 else -1)
+            detectDragGestures { change, amount ->if (kotlin.math.abs(amount.y) > 18f) onDragBy(if (amount.y > 0f) 1 else -1)
             }
         } else {
-            detectDragGesturesAfterLongPress { change, amount ->
-                change.consume()
-                if (kotlin.math.abs(amount.y) > 18f) onDragBy(if (amount.y > 0f) 1 else -1)
+            detectDragGesturesAfterLongPress { change, amount ->if (kotlin.math.abs(amount.y) > 18f) onDragBy(if (amount.y > 0f) 1 else -1)
             }
         }
     }.clickable(onClick = onSelect).border(if (active || selected) 2.dp else 1.dp, if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))) {
