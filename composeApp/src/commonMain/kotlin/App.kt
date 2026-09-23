@@ -80,6 +80,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toDp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -808,7 +809,8 @@ private fun PdfWorkspace(darkReading: Boolean, onToggleReading: () -> Unit) {
                 viewRotation = viewRotation
             )
         }
-    }
+        }
+    )
 }
 
 @Composable
