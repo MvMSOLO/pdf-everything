@@ -645,13 +645,60 @@ class DesktopPdfEngine : PdfEngine {
     private fun modelToAnnotation(model: PdfAnnotation, pdf: PDDocument): PDAnnotation {
         val pdfRect = CoordinateSystem.uiRectToPdf(model.bounds, pdf.getPage(model.pageIndex).mediaBox.height)
         val rect = PDRectangle(pdfRect.left, pdfRect.top, pdfRect.width, pdfRect.height)
-        return when (model.type) {
-            AnnotationType.Note -> PDAnnotationText().apply { rectangle = rect; contents = model.contents.ifEmpty { model.comment?.contents.orEmpty() }; titlePopup = model.author.ifEmpty { model.comment?.author.orEmpty() }; open = false }
-            AnnotationType.FreeText -> PDAnnotationFreeText().apply { rectangle = rect; contents = model.contents; titlePopup = model.author; defaultAppearance = "${model.style.fontSize} Tf 0 g" }
-            AnnotationType.Rectangle -> PDAnnotationSquare().apply { rectangle = rect; contents = model.contents }
-            AnnotationType.Circle -> PDAnnotationCircle().apply { rectangle = rect; contents = model.contents }
-            else -> throw UnsupportedOperationException("Writing ${model.type} annotations is not enabled in this adapter until appearance-preserving mapping is implemented")
+        val annotation = when (model.type) {
+            AnnotationType.Highlight -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationHighlight().apply {
+                rectangle = rect
+                quadPoints = floatArrayOf(
+                    pdfRect.left, pdfRect.top + pdfRect.height,
+                    pdfRect.right, pdfRect.top + pdfRect.height,
+                    pdfRect.left, pdfRect.top,
+                    pdfRect.right, pdfRect.top
+                )
+            }
+            AnnotationType.Underline -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationUnderline().apply {
+                rectangle = rect
+                quadPoints = floatArrayOf(
+                    pdfRect.left, pdfRect.top + pdfRect.height,
+                    pdfRect.right, pdfRect.top + pdfRect.height,
+                    pdfRect.left, pdfRect.top,
+                    pdfRect.right, pdfRect.top
+                )
+            }
+            AnnotationType.StrikeOut -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationStrikeout().apply {
+                rectangle = rect
+                quadPoints = floatArrayOf(
+                    pdfRect.left, pdfRect.top + pdfRect.height,
+                    pdfRect.right, pdfRect.top + pdfRect.height,
+                    pdfRect.left, pdfRect.top,
+                    pdfRect.right, pdfRect.top
+                )
+            }
+            AnnotationType.Note -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText().apply {
+                rectangle = rect
+                contents = model.contents.ifEmpty { model.comment?.contents.orEmpty() }
+                titlePopup = model.author.ifEmpty { model.comment?.author.orEmpty() }
+            }
+            AnnotationType.FreeText -> org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFreeText().apply {
+                rectangle = rect
+                contents = model.contents
+                titlePopup = model.author
+                defaultAppearance = model.style.fontSize.toString() + " Tf 0 g"
+            }
+            else -> throw UnsupportedOperationException("Desktop does not yet serialize " + model.type.name + " annotations")
         }
+        if (annotation is PDAnnotationMarkup) {
+            annotation.contents = model.contents
+            annotation.titlePopup = model.author
+            annotation.subject = model.subject
+        }
+        runCatching {
+            annotation.color = org.apache.pdfbox.pdmodel.graphics.color.PDColor(
+                floatArrayOf(model.style.color.red, model.style.color.green, model.style.color.blue),
+                org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB.INSTANCE
+            )
+        }
+        runCatching { annotation.constructAppearances(pdf) }
+        return annotation
     }
 
     private fun formId(field: PDField) = "form-${field.fullyQualifiedName.orEmpty()}"
