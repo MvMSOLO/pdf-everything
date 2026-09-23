@@ -1,4 +1,4 @@
-package com.example.pdf_everything.phase6
+package com.example.pdf_everything
 
 import com.example.pdf_everything.core.document.Document
 import com.example.pdf_everything.core.document.DocumentSource
