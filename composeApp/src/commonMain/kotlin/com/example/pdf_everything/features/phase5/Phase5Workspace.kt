@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,7 +48,7 @@ import com.example.pdf_everything.core.document.PdfAnnotation
 import com.example.pdf_everything.core.document.RectF
 import com.example.pdf_everything.core.editor.EditorController
 import org.jetbrains.skia.Image as SkiaImage
-import org.jetbrains.skia.toComposeImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.LaunchedEffect
