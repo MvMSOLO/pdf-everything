@@ -235,28 +235,39 @@ class InsertBlankPageCommand(private val position: Int, private val width: Float
 class MergeDocumentsCommand(private val incoming: Document) : SnapshotDocumentCommand("Merge PDF") {
     override fun canExecute(document: Document): Boolean = incoming.pageCount > 0
     override fun transform(document: Document): Document {
+        val namespace = "merge-source-${kotlin.random.Random.nextLong().toString(16)}"
+        val sourceRefs = incoming.sourceDocuments.ifEmpty {
+            incoming.source?.let { listOf(com.example.pdf_everything.core.document.SourceDocumentRef("source", it)) }.orEmpty()
+        }
+        val idMap = sourceRefs.associate { it.id to "${namespace}:${it.id}" }
+        val remappedSources = sourceRefs.map { it.copy(id = idMap.getValue(it.id)) }
+        val fallbackSourceId = remappedSources.firstOrNull()?.id
         val copies = incoming.pages.map { page ->
             val suffix = kotlin.random.Random.nextLong().toString(16)
+            val mappedSourceId = page.sourceDocumentId?.let { idMap[it] } ?: fallbackSourceId
             page.copy(
-                id = "merge-$suffix",
-                sourceDocumentId = incoming.id,
-                annotations = page.annotations.map { it.copy(id = "merge-ann-$suffix-${it.id.hashCode()}") },
-                widgets = page.widgets.map { it.copy(id = "merge-widget-$suffix-${it.id.hashCode()}") },
+                id = "merge-${suffix}",
+                sourceDocumentId = mappedSourceId,
+                annotations = page.annotations.map { it.copy(id = "merge-ann-${suffix}-${it.id.hashCode()}") },
+                widgets = page.widgets.map { it.copy(id = "merge-widget-${suffix}-${it.id.hashCode()}") },
                 objects = page.objects.map { obj ->
                     when (obj) {
-                        is PdfObject.TextObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
-                        is PdfObject.ImageObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
-                        is PdfObject.VectorObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
-                        is PdfObject.PathObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
-                        is PdfObject.ShapeObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
-                        is PdfObject.AnnotationObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
-                        is PdfObject.FormWidgetObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
-                        is PdfObject.UnknownObject -> obj.copy(id = "merge-$suffix-${obj.id.hashCode()}")
+                        is PdfObject.TextObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
+                        is PdfObject.ImageObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
+                        is PdfObject.VectorObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
+                        is PdfObject.PathObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
+                        is PdfObject.ShapeObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
+                        is PdfObject.AnnotationObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
+                        is PdfObject.FormWidgetObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
+                        is PdfObject.UnknownObject -> obj.copy(id = "merge-${suffix}-${obj.id.hashCode()}")
                     }
                 }
             )
         }
-        return document.copy(pages = reindex(document.pages + copies))
+        return document.copy(
+            sourceDocuments = document.sourceDocuments + remappedSources,
+            pages = reindex(document.pages + copies)
+        )
     }
 }
 
@@ -265,9 +276,25 @@ class SetPageLabelCommand(private val pageIndex: Int, private val label: String?
     override fun transform(document: Document): Document = document.copy(pages = document.pages.mapIndexed { index, page -> if (index == pageIndex) page.copy(label = label?.trim()?.takeIf { it.isNotEmpty() }) else page })
 }
 
-class ReplacePageCommand(private val targetIndex: Int, private val incoming: Page) : SnapshotDocumentCommand("Replace page") {
+class ReplacePageCommand(
+    private val targetIndex: Int,
+    private val incoming: Page,
+    private val incomingSources: List<com.example.pdf_everything.core.document.SourceDocumentRef> = emptyList()
+) : SnapshotDocumentCommand("Replace page") {
     override fun canExecute(document: Document): Boolean = targetIndex in document.pages.indices
-    override fun transform(document: Document): Document = document.copy(pages = reindex(document.pages.mapIndexed { index, page -> if (index == targetIndex) incoming.copy(id = "replace-${kotlin.random.Random.nextLong().toString(16)}") else page }))
+    override fun transform(document: Document): Document {
+        val namespace = "replace-source-${kotlin.random.Random.nextLong().toString(16)}"
+        val sourceRefs = incomingSources
+        val idMap = sourceRefs.associate { it.id to "${namespace}:${it.id}" }
+        val page = incoming.copy(
+            id = "replace-${kotlin.random.Random.nextLong().toString(16)}",
+            sourceDocumentId = incoming.sourceDocumentId?.let { idMap[it] } ?: sourceRefs.firstOrNull()?.let { "${namespace}:${it.id}" }
+        )
+        return document.copy(
+            sourceDocuments = document.sourceDocuments + sourceRefs.map { it.copy(id = idMap.getValue(it.id)) },
+            pages = reindex(document.pages.mapIndexed { index, current -> if (index == targetIndex) page else current })
+        )
+    }
 }
 
 private fun remapOutline(items: List<com.example.pdf_everything.core.document.OutlineItem>, oldToNew: Map<Int, Int>, removed: Set<Int>): List<com.example.pdf_everything.core.document.OutlineItem> =

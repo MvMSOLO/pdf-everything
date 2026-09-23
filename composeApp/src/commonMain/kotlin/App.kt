@@ -249,6 +249,9 @@ private fun PdfWorkspace(darkReading: Boolean, onToggleReading: () -> Unit) {
                         encrypted = opened.encrypted,
                         passwordRequired = opened.passwordRequired
                     ),
+                    sourceDocuments = listOf(
+                        com.example.pdf_everything.core.document.SourceDocumentRef("source", source)
+                    ),
                     pages = opened.pages.map { page ->
                         Page(
                             id = page.pageId,
@@ -477,7 +480,11 @@ private fun PdfWorkspace(darkReading: Boolean, onToggleReading: () -> Unit) {
                     }
                 }.onSuccess { other ->
                     val changed = if (replacePageIndex != null && other.pages.isNotEmpty()) {
-                        editor.replacePage(replacePageIndex.coerceIn(0, (editor.document?.pageCount ?: 1) - 1), other.pages.first())
+                        editor.replacePage(
+                            replacePageIndex.coerceIn(0, (editor.document?.pageCount ?: 1) - 1),
+                            other.pages.first(),
+                            other.sourceDocuments
+                        )
                     } else {
                         editor.mergeDocument(other)
                     }

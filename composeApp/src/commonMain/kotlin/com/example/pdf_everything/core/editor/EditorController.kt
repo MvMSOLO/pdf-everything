@@ -231,7 +231,11 @@ class EditorController(initialDocument: Document? = null) {
 
     fun mergeDocument(incoming: Document): Boolean = dispatch(MergeDocumentsCommand(incoming))
 
-    fun replacePage(targetIndex: Int, incoming: com.example.pdf_everything.core.document.Page): Boolean = dispatch(ReplacePageCommand(targetIndex, incoming))
+    fun replacePage(
+        targetIndex: Int,
+        incoming: com.example.pdf_everything.core.document.Page,
+        incomingSources: List<com.example.pdf_everything.core.document.SourceDocumentRef> = emptyList()
+    ): Boolean = dispatch(ReplacePageCommand(targetIndex, incoming, incomingSources))
 
     fun setPageLabel(pageIndex: Int, label: String?): Boolean = dispatch(SetPageLabelCommand(pageIndex, label))
 
