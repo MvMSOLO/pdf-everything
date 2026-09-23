@@ -103,6 +103,12 @@ sealed class DocumentSource {
 }
 
 @Serializable
+data class SourceDocumentRef(
+    val id: String,
+    val source: DocumentSource
+)
+
+@Serializable
 data class DocumentPermissions(
     val canPrint: Boolean = true,
     val canCopy: Boolean = true,
@@ -160,6 +166,7 @@ data class Document(
     val metadata: DocumentMetadata = DocumentMetadata(),
     val permissions: DocumentPermissions = DocumentPermissions(),
     val securityInfo: SecurityInfo = SecurityInfo(),
+    val sourceDocuments: List<SourceDocumentRef> = emptyList(),
     val pages: List<Page> = emptyList(),
     val attachments: List<PdfAttachment> = emptyList(),
     val outline: List<OutlineItem> = emptyList(),
@@ -192,6 +199,16 @@ data class Document(
         if (pages.any { it.id.isBlank() }) errors += "A page has a blank page ID"
         val duplicatePageIds = pages.groupingBy { it.id }.eachCount().filterValues { it > 1 }.keys
         if (duplicatePageIds.isNotEmpty()) errors += "Duplicate page IDs: ${duplicatePageIds.joinToString()}"
+        val sourceIds = sourceDocuments.map { it.id }
+        if (sourceIds.size != sourceIds.toSet().size) errors += "Duplicate source document IDs"
+        if (sourceDocuments.any { it.id.isBlank() }) errors += "A source document has a blank ID"
+        if (sourceDocuments.isNotEmpty()) {
+            pages.forEachIndexed { index, page ->
+                page.sourceDocumentId?.let { sourceId ->
+                    if (sourceId !in sourceIds) errors += "page[$index] references unknown source document $sourceId"
+                }
+            }
+        }
         pages.forEachIndexed { index, page -> errors += page.validate(index).map { "page[$index]: $it" } }
         errors += validateOutline(outline, pageCount)
         errors += validateForms(formModel, pageCount)
